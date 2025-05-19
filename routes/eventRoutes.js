@@ -27,6 +27,12 @@ router.post('/criar', upload.single('imagem'), async (req, res) => {
       linkMaps,
       dataInicio,
       horaInicio,
+      dataFim,
+      valorIngressoInteira,
+      valorIngressoMeia,
+      quantidadeInteira,
+      quantidadeMeia,
+      temMeia,
       querDoar,
       valorDoacao,
       criadoPor
@@ -34,7 +40,7 @@ router.post('/criar', upload.single('imagem'), async (req, res) => {
 
     const novoEvento = new Event({
       nome,
-      imagem: req.file.filename, // nome do arquivo salvo
+      imagem: req.file.filename,
       categoria,
       descricao,
       rua,
@@ -43,8 +49,14 @@ router.post('/criar', upload.single('imagem'), async (req, res) => {
       linkMaps,
       dataInicio,
       horaInicio,
+      dataFim,
+      valorIngressoInteira: valorIngressoInteira ? parseFloat(valorIngressoInteira.replace(',', '.')) : undefined,
+      valorIngressoMeia: valorIngressoMeia ? parseFloat(valorIngressoMeia.replace(',', '.')) : undefined,
+      quantidadeInteira: quantidadeInteira ? parseInt(quantidadeInteira) : undefined,
+      quantidadeMeia: quantidadeMeia ? parseInt(quantidadeMeia) : undefined,
+      temMeia: temMeia === 'true',
       querDoar: querDoar === 'true',
-      valorDoacao: querDoar === 'true' ? valorDoacao : 0,
+      valorDoacao: querDoar === 'true' ? parseFloat(valorDoacao.replace(',', '.')) : 0,
       criadoPor
     });
 
@@ -59,5 +71,6 @@ router.post('/criar', upload.single('imagem'), async (req, res) => {
     res.status(500).json({ message: 'Erro ao criar evento', error: error.message });
   }
 });
+
 
 module.exports = router;

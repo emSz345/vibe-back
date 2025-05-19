@@ -25,10 +25,10 @@ app.use(express.json());
 // Conecta ao MongoDB
 mongoose.connect(process.env.MONGO_URI, {
   useNewUrlParser: true,
-  useUnifiedTopology: true
+  useUnifiedTopology: true,
 })
-  .then(() => console.log('MongoDB conectado'))
-  .catch(err => console.log('Erro ao conectar no MongoDB:', err));
+.then(() => console.log("MongoDB conectado"))
+.catch((err) => console.error("Erro ao conectar MongoDB:", err));
 
 // Rotas
 app.use('/api/users', userRoutes);
