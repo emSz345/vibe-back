@@ -14,6 +14,16 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
+
+router.get('/listar', async (req, res) => {
+  try {
+    const eventos = await Event.find();
+    res.status(200).json(eventos);
+  } catch (error) {
+    res.status(500).json({ message: 'Erro ao buscar eventos', error: error.message });
+  }
+});
+
 // Rota para criação de evento com imagem
 router.post('/criar', upload.single('imagem'), async (req, res) => {
   try {
