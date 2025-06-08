@@ -5,6 +5,7 @@ require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 
+
 // Garante que a pasta 'uploads/' exista
 const uploadDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadDir)) {
