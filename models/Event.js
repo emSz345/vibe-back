@@ -11,6 +11,7 @@ const eventSchema = new mongoose.Schema({
   linkMaps: { type: String, required: true },
   dataInicio: { type: String, required: true },
   horaInicio: { type: String, required: true },
+  horaTermino: { type: String, required: true },
   dataFim: { type: String }, // NOVO
   valorIngressoInteira: { type: Number }, // NOVO
   valorIngressoMeia: { type: Number }, // NOVO
