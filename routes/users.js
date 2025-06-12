@@ -10,7 +10,7 @@ const { enviarEmail } = require('../utils/emailService');
 const fs = require('fs');
 
 const SECRET = process.env.JWT_SECRET;
-const UPLOAD_DIR = 'uploads/perfil-img/'; // <--- NOVO DIRETÓRIO AQUI!
+const UPLOAD_DIR = 'uploads'; // <--- NOVO DIRETÓRIO AQUI!
 const DEFAULT_AVATAR_FILENAME = 'blank_profile.png'; // Nome do arquivo padrão (ex: 'blank_profile.png')
 
 // --- NOVO: Garante que a pasta 'uploads/perfil-img/' exista ---
