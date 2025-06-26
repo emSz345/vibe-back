@@ -1,8 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const Event = require('../models/Event');
+const User = require('../models/User'); // Importa o modelo de Usuário
 const multer = require('multer');
 const path = require('path');
+const { enviarEmailConfirmacaoEvento } = require('../utils/emailService'); // Importa a função específica
 
 // Caminho absoluto para uploads
 const uploadPath = path.join(__dirname, '..', 'uploads');
@@ -31,21 +33,19 @@ router.post('/criar', upload.single('imagem'), async (req, res) => {
       nome,
       categoria,
       descricao,
-      // --- Novos campos de endereço recebidos do frontend ---
       cep,
       rua,
       bairro,
       numero,
       complemento,
-      // --- Fim dos novos campos de endereço ---
       cidade,
       estado,
       linkMaps,
       dataInicio,
       horaInicio,
       horaTermino,
-      dataFimVendas, // Renomeado de dataFim para consistência com o frontend
-      dataInicioVendas, // Adicionado dataInicioVendas
+      dataFimVendas,
+      dataInicioVendas,
       valorIngressoInteira,
       valorIngressoMeia,
       quantidadeInteira,
@@ -53,12 +53,23 @@ router.post('/criar', upload.single('imagem'), async (req, res) => {
       temMeia,
       querDoar,
       valorDoacao,
-      criadoPor
+      criadoPor // ID do usuário que criou o evento
     } = req.body;
 
-    // Verifica se há um arquivo de imagem e se ele está presente
     if (!req.file) {
       return res.status(400).json({ message: 'A imagem do evento é obrigatória.' });
+    }
+
+    // --- CORREÇÃO ADICIONADA AQUI ---
+    // Verifica se o ID do criador foi enviado e não é a string 'null'
+    if (!criadoPor || criadoPor === 'null') {
+      return res.status(400).json({ message: 'O ID do criador do evento é obrigatório. Faça o login para continuar.' });
+    }
+    // --- FIM DA CORREÇÃO ---
+
+    const usuario = await User.findById(criadoPor);
+    if (!usuario) {
+        return res.status(404).json({ message: 'Usuário criador do evento não encontrado.' });
     }
 
     const novoEvento = new Event({
@@ -66,26 +77,24 @@ router.post('/criar', upload.single('imagem'), async (req, res) => {
       imagem: req.file.filename,
       categoria,
       descricao,
-      // --- Atribuindo os novos campos de endereço ao modelo ---
-      cep: cep.replace(/\D/g, ''), // Garante que o CEP seja salvo sem o hífen
+      cep: cep.replace(/\D/g, ''),
       rua,
       bairro,
       numero,
-      complemento: complemento || '', // Garante que o complemento seja uma string vazia se não for fornecido
-      // --- Fim da atribuição dos novos campos ---
+      complemento: complemento || '',
       cidade,
       estado,
       linkMaps,
       dataInicio,
       horaInicio,
       horaTermino,
-      dataFim: dataFimVendas, // Mapeando para o campo dataFim existente no modelo
-      dataInicioVendas, // Salvando a data de início das vendas
-      valorIngressoInteira: valorIngressoInteira ? parseFloat(valorIngressoInteira.replace(',', '.')) : 0, // Definindo default 0 para valores numéricos, se não forem undefined
+      dataFim: dataFimVendas,
+      dataInicioVendas,
+      valorIngressoInteira: valorIngressoInteira ? parseFloat(valorIngressoInteira.replace(',', '.')) : 0,
       valorIngressoMeia: valorIngressoMeia ? parseFloat(valorIngressoMeia.replace(',', '.')) : 0,
       quantidadeInteira: quantidadeInteira ? parseInt(quantidadeInteira) : 0,
       quantidadeMeia: quantidadeMeia ? parseInt(quantidadeMeia) : 0,
-      temMeia: temMeia === 'true', // Converte a string 'true'/'false' para booleano
+      temMeia: temMeia === 'true',
       querDoar: querDoar === 'true',
       valorDoacao: querDoar === 'true' ? parseFloat(valorDoacao.replace(',', '.')) : 0,
       criadoPor
@@ -93,11 +102,21 @@ router.post('/criar', upload.single('imagem'), async (req, res) => {
 
     await novoEvento.save();
 
+    try {
+        await enviarEmailConfirmacaoEvento(usuario, novoEvento);
+    } catch (emailError) {
+        console.error("Falha ao enviar e-mail de confirmação de evento, mas o evento foi criado.", emailError);
+    }
+
     res.status(201).json({
       message: 'Evento criado com sucesso!',
       evento: novoEvento
     });
   } catch (error) {
+    // Adiciona uma verificação para retornar o erro de CastError de forma mais amigável
+    if (error.name === 'CastError') {
+      return res.status(400).json({ message: `O ID '${error.value}' fornecido para o criador do evento não é válido.`, error: error.message });
+    }
     console.error('Erro ao criar evento:', error);
     res.status(500).json({ message: 'Erro ao criar evento', error: error.message });
   }

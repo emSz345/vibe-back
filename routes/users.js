@@ -77,7 +77,7 @@ router.post('/register', upload.single('imagemPerfil'), async (req, res) => {
 
         const emailHtml = `
             <div style="font-family: Arial, sans-serif; text-align: center; color: #333;">
-                <h1 style="color: #007bff;">Bem-vindo(a) ao B4Y Eventos, ${user.nome}!</h1>
+                <h1 style="color: #007bff;">Bem-vindo(a) ao NaVibe Eventos, ${user.nome}!</h1>
                 <p>Seu cadastro foi iniciado. Por favor, clique no botão abaixo para verificar seu endereço de e-mail e ativar sua conta.</p>
                 <a href="${verificationLink}" style="background-color: #28a745; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; margin-top: 20px; display: inline-block;">Verificar meu E-mail</a>
                 <p style="margin-top: 20px;">Se você não se cadastrou, por favor, ignore este e-mail.</p>
@@ -86,7 +86,7 @@ router.post('/register', upload.single('imagemPerfil'), async (req, res) => {
 
         await enviarEmail({
             to: user.email,
-            subject: '✅ Verifique seu e-mail para ativar sua conta na B4Y Eventos!',
+            subject: '✅ Verifique seu e-mail para ativar sua conta na NaVibe Eventos!',
             html: emailHtml
         });
 
