@@ -103,6 +103,104 @@ router.post('/register', upload.single('imagemPerfil'), async (req, res) => {
     }
 });
 
+
+// --- ROTA PARA SOLICITAR REDEFINIÇÃO DE SENHA ---
+router.post('/forgot-password', async (req, res) => {
+    const { email } = req.body;
+    
+    if (!email) {
+        return res.status(400).json({ message: 'E-mail é obrigatório' });
+    }
+
+    try {
+        const user = await User.findOne({ email });
+        if (!user) {
+            return res.status(404).json({ message: 'Usuário não encontrado' });
+        }
+
+        // Criar token de redefinição
+        const resetToken = jwt.sign({ userId: user._id }, SECRET, { expiresIn: '1h' });
+        
+        // Definir data de expiração (1 hora a partir de agora)
+        const resetPasswordExpires = Date.now() + 3600000; // 1 hora em milissegundos
+
+        // Salvar token e expiração no usuário
+        user.resetPasswordToken = resetToken;
+        user.resetPasswordExpires = resetPasswordExpires;
+        await user.save();
+
+        // Criar link de redefinição
+        const resetLink = `${process.env.FRONTEND_URL}/reset-password/${resetToken}`;
+
+        // Enviar e-mail
+        const emailHtml = `
+            <div style="font-family: Arial, sans-serif; text-align: center; color: #333;">
+                <h1 style="color: #007bff;">Redefinição de Senha</h1>
+                <p>Você solicitou a redefinição de senha para sua conta na NaVibe Eventos.</p>
+                <p>Clique no botão abaixo para redefinir sua senha:</p>
+                <a href="${resetLink}" style="background-color: #28a745; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; margin-top: 20px; display: inline-block;">Redefinir Senha</a>
+                <p style="margin-top: 20px;">Se você não solicitou esta redefinição, por favor, ignore este e-mail.</p>
+                <p>Este link expirará em 1 hora.</p>
+            </div>
+        `;
+
+        await enviarEmail({
+            to: user.email,
+            subject: '🔑 Redefinição de Senha - NaVibe Eventos',
+            html: emailHtml
+        });
+
+        res.status(200).json({ message: 'E-mail de redefinição enviado com sucesso' });
+    } catch (err) {
+        console.error("Erro ao solicitar redefinição de senha:", err);
+        res.status(500).json({ message: 'Erro ao processar solicitação', error: err.message });
+    }
+});
+
+
+// --- ROTA PARA REDEFINIR A SENHA ---
+router.post('/reset-password', async (req, res) => {
+    const { token, newPassword } = req.body;
+
+    if (!token || !newPassword) {
+        return res.status(400).json({ message: 'Token e nova senha são obrigatórios' });
+    }
+
+    try {
+        // Verificar token
+        const decoded = jwt.verify(token, SECRET);
+        
+        // Buscar usuário
+        const user = await User.findOne({
+            _id: decoded.userId,
+            resetPasswordToken: token,
+            resetPasswordExpires: { $gt: Date.now() }
+        });
+
+        if (!user) {
+            return res.status(400).json({ message: 'Token inválido ou expirado' });
+        }
+
+        // Verificar se a senha é forte o suficiente
+        if (newPassword.length < 6) {
+            return res.status(400).json({ message: 'A senha deve ter pelo menos 6 caracteres' });
+        }
+
+        // Atualizar senha
+        const hashedPassword = await bcrypt.hash(newPassword, 10);
+        user.senha = hashedPassword;
+        user.resetPasswordToken = undefined;
+        user.resetPasswordExpires = undefined;
+        await user.save();
+
+        res.status(200).json({ message: 'Senha redefinida com sucesso' });
+    } catch (err) {
+        console.error("Erro ao redefinir senha:", err);
+        res.status(500).json({ message: 'Erro ao redefinir senha', error: err.message });
+    }
+});
+
+
 // --- ROTA DE VERIFICAÇÃO DE E-MAIL ---
 router.get('/verify/:token', async (req, res) => {
     try {
@@ -129,6 +227,29 @@ router.get('/verify/:token', async (req, res) => {
     } catch (err) {
         console.error("Erro na verificação de e-mail:", err);
         res.status(400).send('<p>Link de verificação expirado ou inválido. Por favor, tente se registrar novamente.</p>');
+    }
+});
+
+// Adicione esta rota para verificar o token
+router.get('/verify-reset-token/:token', async (req, res) => {
+    try {
+        const { token } = req.params;
+        const decoded = jwt.verify(token, SECRET);
+        
+        const user = await User.findOne({
+            _id: decoded.userId,
+            resetPasswordToken: token,
+            resetPasswordExpires: { $gt: Date.now() }
+        });
+
+        if (!user) {
+            return res.status(400).json({ valid: false, message: 'Token inválido ou expirado' });
+        }
+
+        res.status(200).json({ valid: true });
+    } catch (err) {
+        console.error("Erro ao verificar token:", err);
+        res.status(400).json({ valid: false, message: 'Token inválido ou expirado' });
     }
 });
 
