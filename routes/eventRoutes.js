@@ -17,16 +17,45 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 
 
-router.get('/listar', async (req, res) => {
+// 1. Rota para listar eventos por status (NOVA ROTA)
+// Esta rota é a que o seu front-end está chamando para filtrar.
+router.get('/listar/:status', async (req, res) => {
   try {
-    const eventos = await Event.find();
+    const statusDesejado = req.params.status;
+    const eventos = await Event.find({ status: statusDesejado });
     res.status(200).json(eventos);
   } catch (error) {
-    res.status(500).json({ message: 'Erro ao buscar eventos', error: error.message });
+    res.status(500).json({ message: 'Erro ao buscar eventos por status', error: error.message });
   }
 });
 
-// Rota para criação de evento com imagem
+// A rota original '/listar' foi substituída pela rota com filtro,
+// pois o seu front-end não a utiliza mais.
+
+// 2. Rota para atualizar o status do evento (NOVA ROTA)
+// Esta rota é a que o seu front-end chama quando um evento é aceito, rejeitado ou enviado para reanálise.
+router.patch('/atualizar-status/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    const eventoAtualizado = await Event.findByIdAndUpdate(
+      id,
+      { status: status },
+      { new: true } // Retorna o documento atualizado
+    );
+
+    if (!eventoAtualizado) {
+      return res.status(404).json({ message: 'Evento não encontrado.' });
+    }
+
+    res.status(200).json(eventoAtualizado);
+  } catch (error) {
+    res.status(500).json({ message: 'Erro ao atualizar o status do evento', error: error.message });
+  }
+});
+
+// Rota para criação de evento com imagem (mantida)
 router.post('/criar', upload.single('imagem'), async (req, res) => {
   try {
     const {
@@ -53,23 +82,20 @@ router.post('/criar', upload.single('imagem'), async (req, res) => {
       temMeia,
       querDoar,
       valorDoacao,
-      criadoPor // ID do usuário que criou o evento
+      criadoPor
     } = req.body;
 
     if (!req.file) {
       return res.status(400).json({ message: 'A imagem do evento é obrigatória.' });
     }
 
-    // --- CORREÇÃO ADICIONADA AQUI ---
-    // Verifica se o ID do criador foi enviado e não é a string 'null'
     if (!criadoPor || criadoPor === 'null') {
       return res.status(400).json({ message: 'O ID do criador do evento é obrigatório. Faça o login para continuar.' });
     }
-    // --- FIM DA CORREÇÃO ---
 
     const usuario = await User.findById(criadoPor);
     if (!usuario) {
-        return res.status(404).json({ message: 'Usuário criador do evento não encontrado.' });
+      return res.status(404).json({ message: 'Usuário criador do evento não encontrado.' });
     }
 
     const novoEvento = new Event({
@@ -103,9 +129,9 @@ router.post('/criar', upload.single('imagem'), async (req, res) => {
     await novoEvento.save();
 
     try {
-        await enviarEmailConfirmacaoEvento(usuario, novoEvento);
+      await enviarEmailConfirmacaoEvento(usuario, novoEvento);
     } catch (emailError) {
-        console.error("Falha ao enviar e-mail de confirmação de evento, mas o evento foi criado.", emailError);
+      console.error("Falha ao enviar e-mail de confirmação de evento, mas o evento foi criado.", emailError);
     }
 
     res.status(201).json({
@@ -113,7 +139,6 @@ router.post('/criar', upload.single('imagem'), async (req, res) => {
       evento: novoEvento
     });
   } catch (error) {
-    // Adiciona uma verificação para retornar o erro de CastError de forma mais amigável
     if (error.name === 'CastError') {
       return res.status(400).json({ message: `O ID '${error.value}' fornecido para o criador do evento não é válido.`, error: error.message });
     }
@@ -121,6 +146,5 @@ router.post('/criar', upload.single('imagem'), async (req, res) => {
     res.status(500).json({ message: 'Erro ao criar evento', error: error.message });
   }
 });
-
 
 module.exports = router;

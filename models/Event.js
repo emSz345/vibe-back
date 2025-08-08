@@ -26,7 +26,8 @@ const eventSchema = new mongoose.Schema({
   temMeia: { type: Boolean, default: false },
   querDoar: { type: Boolean, default: false },
   valorDoacao: { type: Number, default: 0 },
-  criadoPor: { type: String, required: true }
+  criadoPor: { type: String, required: true },
+  status: { type: String, default: "em_analise" }
 }, { timestamps: true });
 
 
