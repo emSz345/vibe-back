@@ -10,7 +10,13 @@ const userSchema = new mongoose.Schema({
   verificationToken: { type: String, required: false },
   resetPasswordToken: { type: String }, // Novo campo para token de redefinição
   resetPasswordExpires: { type: Date },  // Novo campo para expiração do token
-  isAdmin: { type: Boolean, default: true }
+  isAdmin: { type: Boolean, default: true },
+  // Adicione dentro do schema
+  provedor: {
+    type: String,
+    enum: ['local', 'google', 'facebook'],
+    default: 'local'
+  },
 }, { timestamps: true });
 
 module.exports = mongoose.model('User', userSchema);

@@ -37,15 +37,18 @@ const upload = multer({ storage });
 // --- ROTA DE CADASTRO ---
 router.post('/register', upload.single('imagemPerfil'), async (req, res) => {
     const { nome, email, senha, provedor } = req.body;
-    
+
     // Pega o nome do arquivo enviado OU usa o nome do arquivo padrão
     const imagemPerfilFilename = req.file ? req.file.filename : DEFAULT_AVATAR_FILENAME;
 
-    if (!nome || !email || !senha) {
-        return res.status(400).json({ message: 'Nome, e-mail e senha são obrigatórios.' });
+    if (!nome || !email) {
+        return res.status(400).json({ message: 'Nome e e-mail são obrigatórios.' });
     }
     if (!validator.isEmail(email)) {
         return res.status(400).json({ message: 'Formato de e-mail inválido.' });
+    }
+    if (provedor === 'local' && !senha) {
+        return res.status(400).json({ message: 'Senha é obrigatória para cadastro local.' });
     }
 
     try {
@@ -107,7 +110,7 @@ router.post('/register', upload.single('imagemPerfil'), async (req, res) => {
 // --- ROTA PARA SOLICITAR REDEFINIÇÃO DE SENHA ---
 router.post('/forgot-password', async (req, res) => {
     const { email } = req.body;
-    
+
     if (!email) {
         return res.status(400).json({ message: 'E-mail é obrigatório' });
     }
@@ -120,7 +123,7 @@ router.post('/forgot-password', async (req, res) => {
 
         // Criar token de redefinição
         const resetToken = jwt.sign({ userId: user._id }, SECRET, { expiresIn: '1h' });
-        
+
         // Definir data de expiração (1 hora a partir de agora)
         const resetPasswordExpires = Date.now() + 3600000; // 1 hora em milissegundos
 
@@ -169,7 +172,7 @@ router.post('/reset-password', async (req, res) => {
     try {
         // Verificar token
         const decoded = jwt.verify(token, SECRET);
-        
+
         // Buscar usuário
         const user = await User.findOne({
             _id: decoded.userId,
@@ -235,7 +238,7 @@ router.get('/verify-reset-token/:token', async (req, res) => {
     try {
         const { token } = req.params;
         const decoded = jwt.verify(token, SECRET);
-        
+
         const user = await User.findOne({
             _id: decoded.userId,
             resetPasswordToken: token,
@@ -272,8 +275,8 @@ router.post('/login', async (req, res) => {
         }
 
         if (user.provedor !== 'local' && user.provedor) {
-             const token = jwt.sign({ id: user._id, nome: user.nome }, SECRET, { expiresIn: '7d' });
-             return res.status(200).json({ message: 'Login via provedor realizado com sucesso', user: { ...user.toObject(), imagemPerfil: user.imagemPerfil }, token });
+            const token = jwt.sign({ id: user._id, nome: user.nome }, SECRET, { expiresIn: '7d' });
+            return res.status(200).json({ message: 'Login via provedor realizado com sucesso', user: { ...user.toObject(), imagemPerfil: user.imagemPerfil }, token });
         }
 
         const senhaCorreta = await bcrypt.compare(senha, user.senha);
@@ -365,5 +368,53 @@ router.get('/me', async (req, res) => {
         res.status(500).json({ message: 'Erro ao buscar usuário', error: error.message });
     }
 });
+
+//nova rota
+router.post('/social-login', async (req, res) => {
+    const { provider, userData } = req.body;
+
+    try {
+        let user = await User.findOne({ email: userData.email });
+
+        if (!user) {
+            // Cria novo usuário para login social
+            user = new User({
+                nome: userData.nome,
+                email: userData.email,
+                provedor: provider,
+                imagemPerfil: userData.imagemPerfil || '',
+                isVerified: true // Marca como verificado imediatamente
+            });
+            await user.save();
+        } else {
+            // Atualiza dados existentes
+            user.nome = userData.nome;
+            user.imagemPerfil = userData.imagemPerfil || user.imagemPerfil;
+            user.provedor = provider;
+            user.isVerified = true; // Garante verificação
+            await user.save();
+        }
+
+        // Gera token JWT
+        const token = jwt.sign({ id: user._id, nome: user.nome }, SECRET, { expiresIn: '7d' });
+
+        res.status(200).json({
+            message: 'Login social realizado com sucesso',
+            user: {
+                _id: user._id,
+                nome: user.nome,
+                email: user.email,
+                imagemPerfil: user.imagemPerfil,
+                isAdmin: user.isAdmin,
+                isVerified: user.isVerified
+            },
+            token
+        });
+    } catch (err) {
+        console.error("Erro no login social:", err);
+        res.status(500).json({ message: 'Erro no login social', error: err.message });
+    }
+});
+
 
 module.exports = router;

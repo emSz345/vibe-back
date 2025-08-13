@@ -25,6 +25,7 @@ if (!fs.existsSync(perfilImgDir)) {
 // Rotas
 const userRoutes = require('./routes/users');
 const eventRoutes = require('./routes/eventRoutes');
+const carrosselRoutes = require('./routes/carrosselRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -61,6 +62,7 @@ mongoose.connect(process.env.MONGO_URI, {
 // Rotas
 app.use('/api/users', userRoutes);
 app.use('/api/eventos', eventRoutes);
+app.use('/api/carrossel', carrosselRoutes);
 
 // Inicia o servidor
 app.listen(PORT, () => {
