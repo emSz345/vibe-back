@@ -1,6 +1,5 @@
 const express = require('express');
 const mongoose = require('mongoose');
-const carrosselRoutes = require('./routes/carrosselRoutes');
 const { enviarEmail } = require('./utils/emailService');
 const cors = require('cors');
 require('dotenv').config();
@@ -31,28 +30,28 @@ if (!fs.existsSync(carrosselDir)) {
 // Rotas
 const userRoutes = require('./routes/users');
 const eventRoutes = require('./routes/eventRoutes');
+const carrosselRoutes = require('./routes/carrosselRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
 app.use(cors());
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use(express.json());
 
-// nodemail apos login
+// --- AQUI ESTÁ A PARTE CORRIGIDA ---
+// Middleware para servir arquivos estáticos. A ordem é importante!
+// Servimos as pastas mais específicas primeiro.
 
-app.get('/api/enviar-email-teste', async (req, res) => {
-    try {
-        await enviarEmail({
-            to: 'felipezica7000@exemplo.com',
-            subject: 'Teste da API de E-mail ✔',
-            html: `<h1>API de E-mail Funcionando!</h1>`
-        });
-        res.status(200).json({ message: 'E-mail de teste enviado com sucesso!' });
-    } catch (error) {
-        res.status(500).json({ message: 'Ocorreu um erro ao enviar o e-mail de teste.' });
-    }
-});
+// Rota para as imagens de perfil
+app.use('/uploads/perfil-img', express.static(path.join(__dirname, 'uploads', 'perfil-img')));
+
+// Rota para as imagens do carrossel
+app.use('/uploads/carrossel', express.static(path.join(__dirname, 'uploads', 'carrossel')));
+
+// Rota genérica para o diretório de uploads (para arquivos que estejam na raiz)
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+// --- FIM DA PARTE CORRIGIDA ---
+
 
 // Conecta ao MongoDB
 mongoose.connect(process.env.MONGO_URI, {

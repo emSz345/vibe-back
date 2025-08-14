@@ -10,21 +10,19 @@ const { enviarEmail } = require('../utils/emailService');
 const fs = require('fs');
 
 const SECRET = process.env.JWT_SECRET;
-const UPLOAD_DIR = 'uploads'; // <--- NOVO DIRETÓRIO AQUI!
-const DEFAULT_AVATAR_FILENAME = 'blank_profile.png'; // Nome do arquivo padrão (ex: 'blank_profile.png')
+const UPLOAD_DIR = 'uploads/perfil-img'; // Diretório onde as imagens de perfil serão salvas
+const DEFAULT_AVATAR_FILENAME = 'blank_profile.png'; // Nome do arquivo de imagem de perfil padrão
 
-// --- NOVO: Garante que a pasta 'uploads/perfil-img/' exista ---
-// É importante que esta verificação seja feita no app.js ou aqui, antes de qualquer operação de arquivo.
+// Garante que o diretório de upload exista ao iniciar
 const fullUploadDirPath = path.join(__dirname, '..', UPLOAD_DIR);
 if (!fs.existsSync(fullUploadDirPath)) {
-    fs.mkdirSync(fullUploadDirPath, { recursive: true }); // 'recursive: true' cria pastas aninhadas se necessário
+    fs.mkdirSync(fullUploadDirPath, { recursive: true });
 }
-// -----------------------------------------------------------------
 
-
+// Configuração do Multer para o destino e nome dos arquivos
 const storage = multer.diskStorage({
     destination: function (req, file, cb) {
-        cb(null, UPLOAD_DIR); // <--- USA O NOVO DIRETÓRIO AQUI!
+        cb(null, UPLOAD_DIR);
     },
     filename: function (req, file, cb) {
         const uniqueName = Date.now() + '-' + file.originalname;
@@ -34,11 +32,21 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage });
 
+// --- FUNÇÃO AUXILIAR PARA OBTER O CAMINHO COMPLETO DA IMAGEM ---
+// Esta função é CRUCIAL. Ela monta o caminho completo para a imagem.
+const getImagemPerfilPath = (filename) => {
+    // Se o filename for a imagem padrão, retorna o caminho correto para a pasta raiz de uploads
+    if (filename === DEFAULT_AVATAR_FILENAME) {
+        return `/uploads/${DEFAULT_AVATAR_FILENAME}`;
+    }
+    // Caso contrário, retorna o caminho completo da imagem salva na subpasta
+    return `/${UPLOAD_DIR}/${filename}`;
+};
+
 // --- ROTA DE CADASTRO ---
 router.post('/register', upload.single('imagemPerfil'), async (req, res) => {
     const { nome, email, senha, provedor } = req.body;
 
-    // Pega o nome do arquivo enviado OU usa o nome do arquivo padrão
     const imagemPerfilFilename = req.file ? req.file.filename : DEFAULT_AVATAR_FILENAME;
 
     if (!nome || !email) {
@@ -68,7 +76,7 @@ router.post('/register', upload.single('imagemPerfil'), async (req, res) => {
             email,
             senha: hashedPassword,
             provedor,
-            imagemPerfil: imagemPerfilFilename, // SALVA O NOME DO ARQUIVO OU O PADRÃO
+            imagemPerfil: imagemPerfilFilename,
             isVerified: false
         });
 
@@ -96,7 +104,10 @@ router.post('/register', upload.single('imagemPerfil'), async (req, res) => {
         res.status(201).json({
             message: 'Usuário cadastrado com sucesso! Um e-mail de verificação foi enviado para sua caixa de entrada.',
             user: {
-                imagemPerfil: user.imagemPerfil // Retorna o nome do arquivo (padrão ou enviado)
+                nome: user.nome,
+                email: user.email,
+                provedor: user.provedor,
+                imagemPerfil: getImagemPerfilPath(user.imagemPerfil) // Retorna o caminho completo
             }
         });
 
@@ -121,21 +132,14 @@ router.post('/forgot-password', async (req, res) => {
             return res.status(404).json({ message: 'Usuário não encontrado' });
         }
 
-        // Criar token de redefinição
         const resetToken = jwt.sign({ userId: user._id }, SECRET, { expiresIn: '1h' });
-
-        // Definir data de expiração (1 hora a partir de agora)
-        const resetPasswordExpires = Date.now() + 3600000; // 1 hora em milissegundos
-
-        // Salvar token e expiração no usuário
+        const resetPasswordExpires = Date.now() + 3600000;
         user.resetPasswordToken = resetToken;
         user.resetPasswordExpires = resetPasswordExpires;
         await user.save();
 
-        // Criar link de redefinição
         const resetLink = `${process.env.FRONTEND_URL}/reset-password/${resetToken}`;
 
-        // Enviar e-mail
         const emailHtml = `
             <div style="font-family: Arial, sans-serif; text-align: center; color: #333;">
                 <h1 style="color: #007bff;">Redefinição de Senha</h1>
@@ -170,10 +174,8 @@ router.post('/reset-password', async (req, res) => {
     }
 
     try {
-        // Verificar token
         const decoded = jwt.verify(token, SECRET);
 
-        // Buscar usuário
         const user = await User.findOne({
             _id: decoded.userId,
             resetPasswordToken: token,
@@ -184,12 +186,10 @@ router.post('/reset-password', async (req, res) => {
             return res.status(400).json({ message: 'Token inválido ou expirado' });
         }
 
-        // Verificar se a senha é forte o suficiente
         if (newPassword.length < 6) {
             return res.status(400).json({ message: 'A senha deve ter pelo menos 6 caracteres' });
         }
 
-        // Atualizar senha
         const hashedPassword = await bcrypt.hash(newPassword, 10);
         user.senha = hashedPassword;
         user.resetPasswordToken = undefined;
@@ -276,7 +276,11 @@ router.post('/login', async (req, res) => {
 
         if (user.provedor !== 'local' && user.provedor) {
             const token = jwt.sign({ id: user._id, nome: user.nome }, SECRET, { expiresIn: '7d' });
-            return res.status(200).json({ message: 'Login via provedor realizado com sucesso', user: { ...user.toObject(), imagemPerfil: user.imagemPerfil }, token });
+            return res.status(200).json({ 
+                message: 'Login via provedor realizado com sucesso', 
+                user: { ...user.toObject(), imagemPerfil: getImagemPerfilPath(user.imagemPerfil) }, 
+                token 
+            });
         }
 
         const senhaCorreta = await bcrypt.compare(senha, user.senha);
@@ -288,7 +292,7 @@ router.post('/login', async (req, res) => {
 
         res.status(200).json({
             message: 'Login realizado com sucesso',
-            user: { ...user.toObject(), imagemPerfil: user.imagemPerfil },
+            user: { ...user.toObject(), imagemPerfil: getImagemPerfilPath(user.imagemPerfil) },
             token
         });
     } catch (err) {
@@ -319,10 +323,8 @@ router.put('/updateByEmail/:email', upload.single('imagemPerfil'), async (req, r
         const user = await User.findOneAndUpdate({ email }, dadosAtualizados, { new: true });
         if (!user) return res.status(444).json({ message: 'Usuário não encontrado' });
 
-        // Se uma nova imagem foi enviada e o usuário tinha uma imagem antiga diferente
-        // E a imagem antiga não é a imagem padrão (para não deletar o padrão)
         if (req.file && userBeforeUpdate && userBeforeUpdate.imagemPerfil && userBeforeUpdate.imagemPerfil !== user.imagemPerfil && userBeforeUpdate.imagemPerfil !== DEFAULT_AVATAR_FILENAME) {
-            const oldImagePath = path.join(__dirname, '..', UPLOAD_DIR, userBeforeUpdate.imagemPerfil); // <--- Usa UPLOAD_DIR aqui!
+            const oldImagePath = path.join(__dirname, '..', UPLOAD_DIR, userBeforeUpdate.imagemPerfil);
             fs.unlink(oldImagePath, (err) => {
                 if (err) console.error("Erro ao deletar imagem antiga:", oldImagePath, err);
                 else console.log("Imagem antiga deletada:", oldImagePath);
@@ -335,9 +337,9 @@ router.put('/updateByEmail/:email', upload.single('imagemPerfil'), async (req, r
                 _id: user._id,
                 nome: user.nome,
                 email: user.email,
-                imagemPerfil: user.imagemPerfil,
                 provedor: user.provedor,
-                isVerified: user.isVerified
+                isVerified: user.isVerified,
+                imagemPerfil: getImagemPerfilPath(user.imagemPerfil) // Retorna o caminho completo
             }
         });
     } catch (err) {
@@ -359,9 +361,9 @@ router.get('/me', async (req, res) => {
             _id: user._id,
             nome: user.nome,
             email: user.email,
-            imagemPerfil: user.imagemPerfil,
             provedor: user.provedor,
-            isVerified: user.isVerified
+            isVerified: user.isVerified,
+            imagemPerfil: getImagemPerfilPath(user.imagemPerfil) // Retorna o caminho completo
         });
     } catch (error) {
         console.error("Erro ao buscar usuário em /me:", error);
@@ -369,7 +371,7 @@ router.get('/me', async (req, res) => {
     }
 });
 
-//nova rota
+// --- ROTA SOCIAL LOGIN ---
 router.post('/social-login', async (req, res) => {
     const { provider, userData } = req.body;
 
@@ -377,25 +379,22 @@ router.post('/social-login', async (req, res) => {
         let user = await User.findOne({ email: userData.email });
 
         if (!user) {
-            // Cria novo usuário para login social
             user = new User({
                 nome: userData.nome,
                 email: userData.email,
                 provedor: provider,
-                imagemPerfil: userData.imagemPerfil || '',
-                isVerified: true // Marca como verificado imediatamente
+                imagemPerfil: userData.imagemPerfil || DEFAULT_AVATAR_FILENAME,
+                isVerified: true
             });
             await user.save();
         } else {
-            // Atualiza dados existentes
             user.nome = userData.nome;
             user.imagemPerfil = userData.imagemPerfil || user.imagemPerfil;
             user.provedor = provider;
-            user.isVerified = true; // Garante verificação
+            user.isVerified = true;
             await user.save();
         }
 
-        // Gera token JWT
         const token = jwt.sign({ id: user._id, nome: user.nome }, SECRET, { expiresIn: '7d' });
 
         res.status(200).json({
@@ -404,9 +403,9 @@ router.post('/social-login', async (req, res) => {
                 _id: user._id,
                 nome: user.nome,
                 email: user.email,
-                imagemPerfil: user.imagemPerfil,
-                isAdmin: user.isAdmin,
-                isVerified: user.isVerified
+                isVerified: user.isVerified,
+                provedor: user.provedor,
+                imagemPerfil: getImagemPerfilPath(user.imagemPerfil) // Retorna o caminho completo
             },
             token
         });
