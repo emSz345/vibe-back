@@ -1,5 +1,6 @@
 const express = require('express');
 const mongoose = require('mongoose');
+const carrosselRoutes = require('./routes/carrosselRoutes');
 const { enviarEmail } = require('./utils/emailService');
 const cors = require('cors');
 require('dotenv').config();
@@ -64,6 +65,7 @@ mongoose.connect(process.env.MONGO_URI, {
 // Rotas
 app.use('/api/users', userRoutes);
 app.use('/api/eventos', eventRoutes);
+app.use('/api/carrossel', carrosselRoutes);
 
 // Inicia o servidor
 app.listen(PORT, () => {
