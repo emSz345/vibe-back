@@ -80,13 +80,14 @@ router.post('/register', upload.single('imagemPerfil'), async (req, res) => {
             isVerified: false
         });
 
-        const verificationToken = jwt.sign({ userId: user._id }, SECRET, { expiresIn: '1d' });
-        user.verificationToken = verificationToken;
-        await user.save();
+        if (provedor === 'local') {
+            const verificationToken = jwt.sign({ userId: user._id }, SECRET, { expiresIn: '1d' });
+            user.verificationToken = verificationToken;
+            await user.save();
 
-        const verificationLink = `${process.env.BASE_URL}/api/users/verify/${verificationToken}`;
+            const verificationLink = `${process.env.BASE_URL}/api/users/verify/${verificationToken}`;
 
-        const emailHtml = `
+            const emailHtml = `
             <div style="font-family: Arial, sans-serif; text-align: center; color: #333;">
                 <h1 style="color: #007bff;">Bem-vindo(a) ao NaVibe Eventos, ${user.nome}!</h1>
                 <p>Seu cadastro foi iniciado. Por favor, clique no botão abaixo para verificar seu endereço de e-mail e ativar sua conta.</p>
@@ -95,12 +96,15 @@ router.post('/register', upload.single('imagemPerfil'), async (req, res) => {
             </div>
         `;
 
-        await enviarEmail({
-            to: user.email,
-            subject: '✅ Verifique seu e-mail para ativar sua conta na NaVibe Eventos!',
-            html: emailHtml
-        });
-
+            await enviarEmail({
+                to: user.email,
+                subject: '✅ Verifique seu e-mail para ativar sua conta na NaVibe Eventos!',
+                html: emailHtml
+            });
+        } else {
+            user.isVerified = true;
+            await user.save();
+        }
         res.status(201).json({
             message: 'Usuário cadastrado com sucesso! Um e-mail de verificação foi enviado para sua caixa de entrada.',
             user: {
@@ -137,6 +141,7 @@ router.post('/forgot-password', async (req, res) => {
         user.resetPasswordToken = resetToken;
         user.resetPasswordExpires = resetPasswordExpires;
         await user.save();
+
 
         const resetLink = `${process.env.FRONTEND_URL}/reset-password/${resetToken}`;
 
@@ -276,10 +281,10 @@ router.post('/login', async (req, res) => {
 
         if (user.provedor !== 'local' && user.provedor) {
             const token = jwt.sign({ id: user._id, nome: user.nome }, SECRET, { expiresIn: '7d' });
-            return res.status(200).json({ 
-                message: 'Login via provedor realizado com sucesso', 
-                user: { ...user.toObject(), imagemPerfil: getImagemPerfilPath(user.imagemPerfil) }, 
-                token 
+            return res.status(200).json({
+                message: 'Login via provedor realizado com sucesso',
+                user: { ...user.toObject(), isAdmin: user.isAdmin, imagemPerfil: getImagemPerfilPath(user.imagemPerfil) },
+                token
             });
         }
 
@@ -292,7 +297,7 @@ router.post('/login', async (req, res) => {
 
         res.status(200).json({
             message: 'Login realizado com sucesso',
-            user: { ...user.toObject(), imagemPerfil: getImagemPerfilPath(user.imagemPerfil) },
+            user: { ...user.toObject(), isAdmin: user.isAdmin, imagemPerfil: getImagemPerfilPath(user.imagemPerfil) },
             token
         });
     } catch (err) {
@@ -339,7 +344,8 @@ router.put('/updateByEmail/:email', upload.single('imagemPerfil'), async (req, r
                 email: user.email,
                 provedor: user.provedor,
                 isVerified: user.isVerified,
-                imagemPerfil: getImagemPerfilPath(user.imagemPerfil) // Retorna o caminho completo
+                imagemPerfil: getImagemPerfilPath(user.imagemPerfil),
+                isAdmin: user.isAdmin  // Retorna o caminho completo
             }
         });
     } catch (err) {
@@ -375,7 +381,25 @@ router.get('/me', async (req, res) => {
 router.post('/social-login', async (req, res) => {
     const { provider, userData } = req.body;
 
+    if (!userData || !userData.email) {
+        return res.status(400).json({
+            message: 'Dados incompletos: e-mail é obrigatório'
+        });
+    }
+
+    console.log("Dados recebidos:", { provider, userData });
+
     try {
+
+        const existingUser = await User.findOne({ email: userData.email });
+
+
+        if (existingUser && existingUser.provedor !== provider) {
+            return res.status(400).json({
+                message: `Este e-mail já está registrado com ${existingUser.provedor}. Faça login com esse provedor.`
+            });
+        }
+
         let user = await User.findOne({ email: userData.email });
 
         if (!user) {
@@ -405,13 +429,18 @@ router.post('/social-login', async (req, res) => {
                 email: user.email,
                 isVerified: user.isVerified,
                 provedor: user.provedor,
+                 isAdmin: user.isAdmin, // Garantir que isAdmin é enviado
                 imagemPerfil: getImagemPerfilPath(user.imagemPerfil) // Retorna o caminho completo
             },
             token
         });
     } catch (err) {
-        console.error("Erro no login social:", err);
-        res.status(500).json({ message: 'Erro no login social', error: err.message });
+        console.error("Erro detalhado no login social:", err);
+        res.status(500).json({
+            message: 'Erro no login social',
+            error: err.message,
+            stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+        });
     }
 });
 

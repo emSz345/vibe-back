@@ -10,7 +10,7 @@ const userSchema = new mongoose.Schema({
   verificationToken: { type: String, required: false },
   resetPasswordToken: { type: String }, // Novo campo para token de redefinição
   resetPasswordExpires: { type: Date },  // Novo campo para expiração do token
-  isAdmin: { type: Boolean, default: true },
+  isAdmin: { type: Boolean, default: false, required: true },
   // Adicione dentro do schema
   provedor: {
     type: String,
