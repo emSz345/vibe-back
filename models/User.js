@@ -5,7 +5,19 @@ const userSchema = new mongoose.Schema({
   email: { type: String, required: true, unique: true },
   senha: { type: String }, // mesmo se for login social, pode deixar vazio
   provedor: { type: String, default: 'local' }, // local, google, facebook, apple
-  imagemPerfil: { type: String, default: '' },
+  imagemPerfil: { 
+    type: String, 
+    default: 'blank_profile.png',
+    set: function(value) {
+      // Se receber nova imagem, substitui qualquer valor anterior
+      // Quando uma nova imagem é definida, marca como local
+      if (value && !value.startsWith('http')) {
+        this.__hasLocalImage = true;
+      }
+      return this.imagemPerfil = value;
+    }
+  },
+  __hasLocalImage: { type: Boolean, select: false },
   isVerified: { type: Boolean, default: false },
   verificationToken: { type: String, required: false },
   resetPasswordToken: { type: String }, // Novo campo para token de redefinição

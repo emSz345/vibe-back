@@ -35,12 +35,18 @@ const upload = multer({ storage });
 // --- FUNÇÃO AUXILIAR PARA OBTER O CAMINHO COMPLETO DA IMAGEM ---
 // Esta função é CRUCIAL. Ela monta o caminho completo para a imagem.
 const getImagemPerfilPath = (filename) => {
-    // Se o filename for a imagem padrão, retorna o caminho correto para a pasta raiz de uploads
-    if (filename === DEFAULT_AVATAR_FILENAME) {
-        return `/uploads/${DEFAULT_AVATAR_FILENAME}`;
-    }
-    // Caso contrário, retorna o caminho completo da imagem salva na subpasta
-    return `/${UPLOAD_DIR}/${filename}`;
+  if (!filename) return `/uploads/${DEFAULT_AVATAR_FILENAME}`;
+  
+  // Se for uma URL completa (começa com http)
+  if (filename.startsWith('http')) {
+    return filename; // Retorna a URL diretamente
+  }
+  
+  if (filename === DEFAULT_AVATAR_FILENAME) {
+    return `/uploads/${DEFAULT_AVATAR_FILENAME}`;
+  }
+  
+  return `/${UPLOAD_DIR}/${filename}`;
 };
 
 // --- ROTA DE CADASTRO ---
@@ -328,13 +334,15 @@ router.put('/updateByEmail/:email', upload.single('imagemPerfil'), async (req, r
         const user = await User.findOneAndUpdate({ email }, dadosAtualizados, { new: true });
         if (!user) return res.status(444).json({ message: 'Usuário não encontrado' });
 
-        if (req.file && userBeforeUpdate && userBeforeUpdate.imagemPerfil && userBeforeUpdate.imagemPerfil !== user.imagemPerfil && userBeforeUpdate.imagemPerfil !== DEFAULT_AVATAR_FILENAME) {
+        if (req.file && userBeforeUpdate && userBeforeUpdate.imagemPerfil) {
+             if (!userBeforeUpdate.imagemPerfil.startsWith('http') && userBeforeUpdate.imagemPerfil !== DEFAULT_AVATAR_FILENAME) {
             const oldImagePath = path.join(__dirname, '..', UPLOAD_DIR, userBeforeUpdate.imagemPerfil);
             fs.unlink(oldImagePath, (err) => {
                 if (err) console.error("Erro ao deletar imagem antiga:", oldImagePath, err);
                 else console.log("Imagem antiga deletada:", oldImagePath);
             });
         }
+    }
 
         res.status(200).json({
             message: 'Usuário atualizado com sucesso',
@@ -413,7 +421,9 @@ router.post('/social-login', async (req, res) => {
             await user.save();
         } else {
             user.nome = userData.nome;
-            user.imagemPerfil = userData.imagemPerfil || user.imagemPerfil;
+            if (!user.imagemPerfil || user.imagemPerfil === DEFAULT_AVATAR_FILENAME) {
+                user.imagemPerfil = userData.imagemPerfil || user.imagemPerfil;
+            }
             user.provedor = provider;
             user.isVerified = true;
             await user.save();
@@ -429,7 +439,7 @@ router.post('/social-login', async (req, res) => {
                 email: user.email,
                 isVerified: user.isVerified,
                 provedor: user.provedor,
-                 isAdmin: user.isAdmin, // Garantir que isAdmin é enviado
+                isAdmin: user.isAdmin, // Garantir que isAdmin é enviado
                 imagemPerfil: getImagemPerfilPath(user.imagemPerfil) // Retorna o caminho completo
             },
             token
