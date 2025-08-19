@@ -1,24 +1,31 @@
 const express = require('express');
 const router = express.Router();
 const Event = require('../models/Event');
-const User = require('../models/User'); // Importa o modelo de Usuário
+const User = require('../models/User');
 const multer = require('multer');
 const path = require('path');
-const { enviarEmailConfirmacaoEvento } = require('../utils/emailService'); // Importa a função específica
+const { enviarEmailConfirmacaoEvento } = require('../utils/emailService');
 
-// Caminho absoluto para uploads
+// Configuração do multer para salvar arquivos na pasta 'uploads'
 const uploadPath = path.join(__dirname, '..', 'uploads');
-
-// Configuração do multer
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, uploadPath),
   filename: (req, file, cb) => cb(null, Date.now() + path.extname(file.originalname))
 });
 const upload = multer({ storage });
 
+// Rota para listar eventos com status 'aprovado'
+// Esta rota corresponde à chamada do seu frontend: /api/eventos/aprovados
+router.get('/aprovados', async (req, res) => {
+  try {
+    const eventos = await Event.find({ status: 'aprovado' });
+    res.status(200).json(eventos);
+  } catch (error) {
+    res.status(500).json({ message: 'Erro ao buscar eventos aprovados', error: error.message });
+  }
+});
 
-// 1. Rota para listar eventos por status (NOVA ROTA)
-// Esta rota é a que o seu front-end está chamando para filtrar.
+// Rota para listar eventos por status (mantida para flexibilidade)
 router.get('/listar/:status', async (req, res) => {
   try {
     const statusDesejado = req.params.status;
@@ -29,11 +36,20 @@ router.get('/listar/:status', async (req, res) => {
   }
 });
 
-// A rota original '/listar' foi substituída pela rota com filtro,
-// pois o seu front-end não a utiliza mais.
+// Rota para buscar um evento por ID
+// router.get('/:id', async (req, res) => {
+//   try {
+//     const evento = await Event.findById(req.params.id);
+//     if (!evento) {
+//       return res.status(404).json({ message: 'Evento não encontrado.' });
+//     }
+//     res.status(200).json(evento);
+//   } catch (error) {
+//     res.status(500).json({ message: 'Erro ao buscar evento por ID', error: error.message });
+//   }
+// });
 
-// 2. Rota para atualizar o status do evento (NOVA ROTA)
-// Esta rota é a que o seu front-end chama quando um evento é aceito, rejeitado ou enviado para reanálise.
+// Rota para atualização de status do evento
 router.patch('/atualizar-status/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -42,7 +58,7 @@ router.patch('/atualizar-status/:id', async (req, res) => {
     const eventoAtualizado = await Event.findByIdAndUpdate(
       id,
       { status: status },
-      { new: true } // Retorna o documento atualizado
+      { new: true }
     );
 
     if (!eventoAtualizado) {
@@ -55,7 +71,7 @@ router.patch('/atualizar-status/:id', async (req, res) => {
   }
 });
 
-// Rota para criação de evento com imagem (mantida)
+// Rota para criação de evento com imagem
 router.post('/criar', upload.single('imagem'), async (req, res) => {
   try {
     const {

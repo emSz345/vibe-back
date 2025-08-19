@@ -1,20 +1,18 @@
 const express = require('express');
 const mongoose = require('mongoose');
-const { enviarEmail } = require('./utils/emailService');
 const cors = require('cors');
 require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
+const eventBotRoutes = require('./routes/eventBotRoutes');
 
 
-// Garante que a pasta 'uploads/' exista
 const uploadBaseDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadBaseDir)) {
     fs.mkdirSync(uploadBaseDir);
     console.log(`Pasta criada: ${uploadBaseDir}`);
 }
 
-// Garante que as subpastas 'uploads/perfil-img/' e 'uploads/carrossel/' existam
 const perfilImgDir = path.join(uploadBaseDir, 'perfil-img');
 const carrosselDir = path.join(uploadBaseDir, 'carrossel');
 if (!fs.existsSync(perfilImgDir)) {
@@ -26,11 +24,10 @@ if (!fs.existsSync(carrosselDir)) {
     console.log(`Subpasta criada: ${carrosselDir}`);
 }
 
-
-// Rotas
 const userRoutes = require('./routes/users');
 const eventRoutes = require('./routes/eventRoutes');
 const carrosselRoutes = require('./routes/carrosselRoutes');
+const witaiRoutes = require('./routes/witaiRoutes'); 
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -38,20 +35,11 @@ const PORT = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.json());
 
-// --- AQUI ESTÁ A PARTE CORRIGIDA ---
-// Middleware para servir arquivos estáticos. A ordem é importante!
-// Servimos as pastas mais específicas primeiro.
-
-// Rota para as imagens de perfil
-app.use('/uploads/perfil-img', express.static(path.join(__dirname, 'uploads', 'perfil-img')));
-
-// Rota para as imagens do carrossel
-app.use('/uploads/carrossel', express.static(path.join(__dirname, 'uploads', 'carrossel')));
-
-// Rota genérica para o diretório de uploads (para arquivos que estejam na raiz)
+// Middleware para servir arquivos estáticos.
+app.use(express.static(path.join(__dirname, 'public')));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-// --- FIM DA PARTE CORRIGIDA ---
-
+app.use('/uploads/perfil-img', express.static(path.join(__dirname, 'uploads', 'perfil-img')));
+app.use('/uploads/carrossel', express.static(path.join(__dirname, 'uploads', 'carrossel')));
 
 // Conecta ao MongoDB
 mongoose.connect(process.env.MONGO_URI, {
@@ -61,10 +49,17 @@ mongoose.connect(process.env.MONGO_URI, {
     .then(() => console.log("MongoDB conectado"))
     .catch((err) => console.error("Erro ao conectar MongoDB:", err));
 
-// Rotas
+// Conecte as rotas da sua API usando o prefixo '/api'
 app.use('/api/users', userRoutes);
-app.use('/api/eventos', eventRoutes);
+app.use('/api', eventRoutes);
 app.use('/api/carrossel', carrosselRoutes);
+app.use('/api/witai', witaiRoutes);
+app.use('/api/bot/eventos', eventBotRoutes);
+
+// Rota 404 - Adicione esta rota no final, antes da inicialização do servidor
+app.use((req, res, next) => {
+    res.status(404).send("Desculpe, a página que você procura não foi encontrada.");
+});
 
 // Inicia o servidor
 app.listen(PORT, () => {
