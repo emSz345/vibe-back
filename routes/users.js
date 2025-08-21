@@ -83,7 +83,7 @@ router.post('/register', upload.single('imagemPerfil'), async (req, res) => {
             email,
             senha: hashedPassword,
             provedor,
-            imagemPerfil: userData.imagemPerfil || DEFAULT_AVATAR_FILENAME,
+            imagemPerfil: imagemPerfilFilename,
             isVerified: false
         });
 
@@ -457,3 +457,4 @@ router.post('/social-login', async (req, res) => {
 
 
 module.exports = router;
+
