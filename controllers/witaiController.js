@@ -27,77 +27,116 @@ function extractLocalizacaoManual(text) {
   return null;
 }
 
+
+function extractCategoriaManual(text) {
+  const categoriasComuns = [
+    'rock', 'sertanejo', 'funk', 'pop', 'eletrônica', 'eletronica',
+    'mpb', 'samba', 'pagode', 'forró', 'forro', 'rap', 'hip hop',
+    'reggae', 'jazz', 'blues', 'clássica', 'classica', 'gospel',
+    "show"
+  ];
+
+  const textLower = text.toLowerCase();
+
+  for (const cat of categoriasComuns) {
+    if (textLower.includes(cat)) {
+      return cat;
+    }
+  }
+
+  return null;
+}
 // Função para processar a resposta do Wit.ai
+// Função melhorada para processar respostas
 function processWitResponse(data) {
   console.log('Resposta Wit.ai:', JSON.stringify(data, null, 2));
 
-  if (data.entities && (data.entities.evento || data.entities.categoria)) {
-    return 'Gostaria de saber mais sobre eventos? Posso te ajudar a encontrar shows, festas e outros eventos! 🎉';
-  }
-
   if (!data.intents || data.intents.length === 0) {
-    return 'Desculpe, não entendi. Pode reformular?';
+    return {
+      text: 'Desculpe, não entendi. Pode reformular ou escolher uma opção abaixo? 🤔',
+      showCommands: true
+    };
   }
 
   const intent = data.intents[0].name;
   const confidence = data.intents[0].confidence;
 
-  // Confiança mínima de 0.5 para considerar a intenção
+  // Confiança mínima de 0.5
   if (confidence < 0.5) {
-    return 'Não tenho certeza do que você quer dizer. Pode explicar de outra forma?';
+    return {
+      text: 'Não tenho certeza do que você quer dizer. Que tal usar um dos comandos abaixo?',
+      showCommands: true
+    };
   }
 
-  // Respostas baseadas na intenção
+  // Respostas mais ricas e contextualizadas
   const responses = {
-    saudacao: [
-      'E aí! 🎧 Bora subir essa vibe hoje?',
-      'Oi! Tudo bem? Em que posso ser útil?',
-      'Olá! É um prazer conversar com você!'
-    ],
-    despedida: [
-      'Até logo! Foi ótimo conversar com você! 👋',
-      'Tchau! Volte sempre que precisar!',
-      'Até mais! Espero ter ajudado!'
-    ],
-    ajuda: [
-      'Claro! Posso ajudar com informações sobre a NaVibe. O que você gostaria de saber?',
-      'Estou aqui para ajudar! Do que você precisa?',
-      'Pergunte à vontade! Farei o possível para ajudar.'
-    ],
-     evento_pergunta: (entities) => {
-    if (entities?.localizacao) {
-      return `Vou buscar eventos em ${entities.localizacao[0].value} para você! 🗺️`;
+    saudacao: {
+      text: 'E aí! 🎧 Bora subir essa vibe hoje? Sou seu assistente da NaVibe! 🚀',
+      showCommands: true
+    },
+    despedida: {
+      text: 'Até logo! Foi ótimo conversar com você! 👋 Volte sempre que precisar!',
+      showCommands: false
+    },
+    ajuda: {
+      text: 'Claro! Posso ajudar com:\n• 📅 Informações sobre eventos\n• 🎵 Buscar eventos por categoria\n• 🌆 Eventos por cidade\n• 🎫 Detalhes de ingressos\n• ❓ Dúvidas gerais',
+      showCommands: true
+    },
+    evento_pergunta: (entities) => {
+      if (entities?.localizacao) {
+        return {
+          text: `🎪 Vou buscar eventos em ${entities.localizacao[0].value.toUpperCase()} para você! 🗺️`,
+          showCommands: false
+        };
+      }
+      return {
+        text: 'Não consegui encontrar o evento',
+        showCommands: true
+      };
+    },
+    evento_busca: {
+      text: '🔍 Buscando os melhores eventos para você...',
+      showCommands: false
+    },
+    categorias_pergunta: {
+      text: 'Vou buscar as categorias disponíveis para você! 🎵',
+      showCommands: false
+    },
+    evento_proximos: {
+      text: '📅 Listando os próximos eventos imperdíveis!',
+      showCommands: false
+    },
+    evento_localizacao: (entities) => {
+      const local = entities?.localizacao?.[0]?.value || 'essa região';
+      return {
+        text: `🌍 Procurando eventos em ${local.toUpperCase()}...`,
+        showCommands: false
+      };
+    },
+    evento_categoria: (entities) => {
+      const categoria = entities?.categoria?.[0]?.value || 'essa categoria';
+      return {
+        text: `🎵 Buscando eventos de ${categoria}...`,
+        showCommands: false
+      };
+    },
+    default: {
+      text: 'Interessante! Posso te ajudar com eventos, categorias, cidades ou informações gerais! 🎪',
+      showCommands: true
     }
-  },
-    evento_pergunta: [
-      'Temos vários eventos incríveis! Quer saber sobre algum específico?',
-      'Os eventos da NaVibe são sempre animados! Qual você quer conhecer?',
-      'Temos uma programação diversificada. Tem interesse em algum tipo de evento?'
-    ],
-    evento_busca: [
-      'Vou buscar os melhores eventos para você! 🎪',
-      'Deixa eu ver o que temos de bom acontecendo...',
-      'Hmm, vamos encontrar uns eventos tops!'
-    ],
-    evento_proximos: [
-      'Deixa eu ver os próximos eventos... 📅',
-      'Vou listar os eventos que estão por vir!',
-      'Confere aqui os próximos rolês!'
-    ],
-    produto_pergunta: [
-      'Temos diversos produtos! 🎵 Quer saber sobre CDs, vinis ou merchandising?',
-      'Nossa loja tem várias opções! Qual produto te interessa?',
-      'Temos desde discos até roupas! Sobre qual item quer saber?'
-    ],
-    default: 'Interessante! Sobre a NaVibe, posso te ajudar com informações sobre eventos, produtos e muito mais!'
   };
 
-  const randomResponse = (responsesArray) =>
-    responsesArray[Math.floor(Math.random() * responsesArray.length)];
 
-  return responses[intent]
-    ? randomResponse(responses[intent])
-    : responses.default;
+
+  const getResponse = () => {
+    if (typeof responses[intent] === 'function') {
+      return responses[intent](data.entities);
+    }
+    return responses[intent] || responses.default;
+  };
+
+  return getResponse();
 }
 
 // Controlador principal para o Wit.ai
@@ -138,25 +177,62 @@ const witaiController = {
 
       const witData = response.data;
 
+      if (!witData.intents || witData.intents.length === 0) {
+        console.log('Nenhuma intenção detectada - aplicando fallback...');
+        
+        // Verifica se há palavras-chave de eventos na mensagem
+        const hasEventKeywords = /evento|show|festival|concerto|festa|musica|banda|dj|shows|eventos/i.test(witData.text);
+        const hasCategoria = extractCategoriaManual(witData.text);
+        const hasLocalizacao = extractLocalizacaoManual(witData.text);
+        
+        if (hasEventKeywords || hasCategoria || hasLocalizacao) {
+          console.log('Fallback: Detectadas palavras-chave de evento');
+          // Força a intenção de busca de eventos
+          witData.intents = [{ name: 'evento_busca', confidence: 0.6 }];
+        }
+      }
+
       // Processar a resposta do Wit.ai
       let botReply = processWitResponse(witData);
 
       console.log('Resposta processada:', botReply);
 
       let eventos = null;
-      if (witData.intents?.[0]?.name === 'evento_pergunta' ||
+      let categorias = null;
+
+      if (witData.intents?.[0]?.name === 'categorias_pergunta') {
+        categorias = await Event.distinct('categoria', { status: 'aprovado' });
+        console.log('Categorias encontradas:', categorias);
+
+        botReply = {
+          text: `Encontrei ${categorias.length} categorias disponíveis! 🎵`,
+          showCommands: false
+        };
+      }
+      else if (witData.intents?.[0]?.name === 'evento_pergunta' ||
         witData.intents?.[0]?.name === 'evento_busca' ||
         witData.intents?.[0]?.name === 'evento_proximos' ||
-        witData.intents?.[0]?.name === 'evento_localizacao' || // ← Nova intenção
+        witData.intents?.[0]?.name === 'evento_localizacao' ||
+        witData.intents?.[0]?.name === 'evento_categoria' || // ← Adicione esta linha
         witData.entities?.evento ||
         witData.entities?.categoria ||
-        witData.entities?.localizacao) {
-
+        witData.entities?.localizacao ||
+        extractCategoriaManual(witData.text) || // ← Adicione esta condição
+        extractLocalizacaoManual(witData.text)) { 
 
         const filter = { status: 'aprovado' };
 
         if (witData.entities?.categoria?.[0]?.value) {
           filter.categoria = witData.entities.categoria[0].value;
+        } else {
+          console.log('Texto original:', witData.text);
+          console.log('Categoria detectada pelo Wit:', witData.entities?.categoria?.[0]?.value);
+          console.log('Categoria extraída manualmente:', extractCategoriaManual(witData.text));
+          console.log('Filtro final aplicado:', filter);
+          const categoriaManual = extractCategoriaManual(witData.text);
+          if (categoriaManual) {
+             filter.categoria = { $regex: categoriaManual, $options: 'i' };
+          }
         }
 
         let localizacao = null;
@@ -190,20 +266,21 @@ const witaiController = {
           .sort({ dataInicio: 1 })
           .limit(5);
 
-          console.log('Eventos encontrados:', eventos.length);
-  console.log('Filtro utilizado:', filter);
-  console.log('Localização detectada:', localizacao);
+        console.log('Eventos encontrados:', eventos.length);
+        console.log('Filtro utilizado:', filter);
+        console.log('Localização detectada:', localizacao);
 
 
       }
 
       res.json({
         success: true,
-        reply: botReply,
+        reply: botReply, // Agora é um objeto {text, showCommands}
         intent: witData.intents?.[0]?.name || 'unknown',
         confidence: witData.intents?.[0]?.confidence || 0,
         entities: witData.entities || {},
-        eventos: eventos || []
+        eventos: eventos || [],
+        categorias: categorias || []
       });
 
     } catch (error) {
