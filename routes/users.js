@@ -37,15 +37,16 @@ const upload = multer({ storage });
 const getImagemPerfilPath = (filename) => {
   if (!filename) return `/uploads/${DEFAULT_AVATAR_FILENAME}`;
   
-  // Se for uma URL completa (começa com http)
+  // Se for uma URL completa (começa com http) - mantém como está
   if (filename.startsWith('http')) {
-    return filename; // Retorna a URL diretamente
+    return filename;
   }
   
   if (filename === DEFAULT_AVATAR_FILENAME) {
     return `/uploads/${DEFAULT_AVATAR_FILENAME}`;
   }
   
+  // Para imagens locais, retorna o caminho relativo
   return `/${UPLOAD_DIR}/${filename}`;
 };
 
@@ -82,7 +83,7 @@ router.post('/register', upload.single('imagemPerfil'), async (req, res) => {
             email,
             senha: hashedPassword,
             provedor,
-            imagemPerfil: imagemPerfilFilename,
+            imagemPerfil: userData.imagemPerfil || DEFAULT_AVATAR_FILENAME,
             isVerified: false
         });
 
