@@ -32,7 +32,13 @@ const witaiRoutes = require('./routes/witaiRoutes');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-app.use(cors());
+
+const corsOptions = {
+    orign: process.env.FRONTEND_URL,
+    optionsSucessStatus: 20,
+}
+
+app.use(cors(corsOptions));
 app.use(express.json());
 
 // Middleware para servir arquivos estáticos.
