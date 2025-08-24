@@ -287,7 +287,7 @@ router.post('/login', async (req, res) => {
         }
 
         if (user.provedor !== 'local' && user.provedor) {
-            const token = jwt.sign({ id: user._id, nome: user.nome }, SECRET, { expiresIn: '7d' });
+            const token = jwt.sign({ userId: user._id, nome: user.nome }, SECRET, { expiresIn: '7d' });
             return res.status(200).json({
                 message: 'Login via provedor realizado com sucesso',
                 user: { ...user.toObject(), isAdmin: user.isAdmin, imagemPerfil: getImagemPerfilPath(user.imagemPerfil) },
@@ -300,7 +300,7 @@ router.post('/login', async (req, res) => {
             return res.status(401).json({ message: 'Credenciais inválidas' });
         }
 
-        const token = jwt.sign({ id: user._id, nome: user.nome }, SECRET, { expiresIn: '7d' });
+        const token = jwt.sign({ userId: user._id, nome: user.nome }, SECRET, { expiresIn: '7d' });
 
         res.status(200).json({
             message: 'Login realizado com sucesso',
@@ -416,7 +416,7 @@ router.post('/social-login', async (req, res) => {
                 nome: userData.nome,
                 email: userData.email,
                 provedor: provider,
-                imagemPerfil: userData.imagemPerfil || DEFAULT_AVATAR_FILENAME,
+                imagemPerfil: imagemPerfilFilename,
                 isVerified: true
             });
             await user.save();
@@ -430,7 +430,7 @@ router.post('/social-login', async (req, res) => {
             await user.save();
         }
 
-        const token = jwt.sign({ id: user._id, nome: user.nome }, SECRET, { expiresIn: '7d' });
+        const token = jwt.sign({ userId: user._id, nome: user.nome }, SECRET, { expiresIn: '7d' });
 
         res.status(200).json({
             message: 'Login social realizado com sucesso',
@@ -457,4 +457,3 @@ router.post('/social-login', async (req, res) => {
 
 
 module.exports = router;
-

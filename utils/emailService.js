@@ -44,6 +44,56 @@ const enviarEmail = async ({ to, subject, html }) => {
  * @param {string} usuario.email - E-mail do usuário.
  * @param {object} evento - O objeto do evento que foi criado.
  */
+
+
+const enviarEmailRejeicaoEvento = async (usuario, evento, motivo) => {
+    // ✅ VERIFICAÇÕES DE SEGURANÇA
+    if (!usuario) {
+        console.error('Usuário é null, não é possível enviar email de rejeição');
+        return;
+    }
+    
+    if (!usuario.email) {
+        console.error('Usuário não tem email, não é possível enviar email de rejeição');
+        return;
+    }
+
+    const emailHtml = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      <h2 style="color: #dc3545;">Seu evento foi rejeitado</h2>
+      
+      <p>Olá <strong>${usuario.nome || 'Usuário'}</strong>,</p>
+      
+      <p>Infelizmente, seu evento <strong>"${evento.nome}"</strong> não foi aprovado pela nossa equipe.</p>
+      
+      <div style="background-color: #f8f9fa; padding: 15px; border-left: 4px solid #dc3545; margin: 20px 0;">
+        <h3 style="color: #dc3545; margin-top: 0;">Motivo da Rejeição:</h3>
+        <h4>${motivo.titulo}</h4>
+        <p>${motivo.descricao}</p>
+      </div>
+
+      <p>Você pode corrigir os problemas mencionados e enviar o evento para reanálise.</p>
+      
+      <p style="color: #6c757d; font-size: 14px;">
+        Se você acredita que houve um equívoco, entre em contato conosco respondendo este email.
+      </p>
+      
+      <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
+      
+      <p style="color: #6c757d; font-size: 12px;">
+        Atenciosamente,<br>
+        Equipe NaVibe Eventos
+      </p>
+    </div>
+  `;
+
+  await enviarEmail({
+    to: usuario.email,
+    subject: `❌ Evento Rejeitado: ${evento.nome}`,
+    html: emailHtml
+  });
+};
+
 const enviarEmailConfirmacaoEvento = async (usuario, evento) => {
     // Formata a data para uma leitura mais agradável
     const dataFormatada = new Date(evento.dataInicio).toLocaleDateString('pt-BR', {
@@ -103,4 +153,4 @@ const enviarEmailConfirmacaoEvento = async (usuario, evento) => {
 
 
 // Exporta ambas as funções
-module.exports = { enviarEmail, enviarEmailConfirmacaoEvento };
+module.exports = { enviarEmail, enviarEmailConfirmacaoEvento, enviarEmailRejeicaoEvento };

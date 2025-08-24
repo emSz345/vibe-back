@@ -26,8 +26,16 @@ const eventSchema = new mongoose.Schema({
   temMeia: { type: Boolean, default: false },
   querDoar: { type: Boolean, default: false },
   valorDoacao: { type: Number, default: 0 },
-  criadoPor: { type: String, required: true },
-  status: { type: String, default: "em_analise" }
+  criadoPor: { 
+  type: mongoose.Schema.Types.ObjectId, 
+  ref: 'User', 
+  required: true 
+},
+  status: { 
+  type: String, 
+   enum: ["em_analise", "aprovado", "rejeitado", "em_reanalise"],
+  default: "em_analise" 
+}
 }, { timestamps: true });
 
 

@@ -5,13 +5,48 @@ require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 const eventBotRoutes = require('./routes/eventBotRoutes');
+const jwt = require('jsonwebtoken');
 
+
+
+const authenticateToken = (req, res, next) => {
+   const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  console.log('🔐 Middleware - Header:', authHeader);
+  console.log('🔐 Middleware - Token recebido:', token ? 'Presente' : 'Ausente');
+
+  if (!token) {
+    console.log('❌ Token não fornecido');
+    return res.status(401).json({ message: 'Token de acesso necessário' });
+  }
+
+  jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
+    if (err) {
+      console.log('❌ Token inválido:', err.message);
+      return res.status(403).json({ message: 'Token inválido' });
+    }
+    
+    console.log('✅ Token válido - Decoded:', decoded);
+    
+    // Verifique se userId existe no token decodificado
+    if (!decoded.userId) {
+      console.log('❌ userId não encontrado no token');
+      return res.status(403).json({ message: 'Estrutura do token inválida' });
+    }
+    
+    req.user = decoded;
+    next();
+  });
+};
 
 const uploadBaseDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadBaseDir)) {
     fs.mkdirSync(uploadBaseDir);
     console.log(`Pasta criada: ${uploadBaseDir}`);
 }
+
+
 
 const perfilImgDir = path.join(uploadBaseDir, 'perfil-img');
 const carrosselDir = path.join(uploadBaseDir, 'carrossel');
@@ -34,7 +69,8 @@ const PORT = process.env.PORT || 5000;
 
 
 const corsOptions = {
-    orign: process.env.FRONTEND_URL,
+    orign: process.env.FRONTEND_URL || 'http://localhost:3000',
+     credentials: true, 
     optionsSucessStatus: 20,
 }
 
@@ -57,10 +93,11 @@ mongoose.connect(process.env.MONGO_URI, {
 
 // Conecte as rotas da sua API usando o prefixo '/api'
 app.use('/api/users', userRoutes);
-app.use('/api', eventRoutes);
+app.use('/api/eventos', eventRoutes);
 app.use('/api/carrossel', carrosselRoutes);
 app.use('/api/witai', witaiRoutes);
 app.use('/api/bot/eventos', eventBotRoutes);
+
 
 // Rota 404 - Adicione esta rota no final, antes da inicialização do servidor
 app.use((req, res, next) => {
