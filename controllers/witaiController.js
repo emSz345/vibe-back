@@ -1,372 +1,766 @@
-const axios = require('axios');
+const { Wit } = require('node-wit');
 const Event = require('../models/Event');
+const axios = require('axios');
 
+// Inicializa o cliente do Wit.ai
+const witClient = new Wit({
+  accessToken: process.env.WIT_AI_SERVER_TOKEN
+});
 
+// Função auxiliar para validar categoria
+function isValidCategory(category) {
+  if (!category) return false;
 
-function extractLocalizacaoManual(text) {
-  const localizacoes = [
-    'são paulo', 'sao paulo', 'sp',
-    'rio de janeiro', 'rio', 'rj',
-    'minas gerais', 'mg', 'belo horizonte', 'bh',
-    'bahia', 'ba', 'salvador',
-    'paraná', 'pr', 'curitiba',
-    'rio grande do sul', 'rs', 'porto alegre',
-    'pernambuco', 'pe', 'recife',
-    'ceará', 'ce', 'fortaleza',
-    // adicione mais cidades/estados conforme necessário
+  const catLower = category.toLowerCase().trim();
+
+  const categoriasValidas = [
+    'rock', 'sertanejo', 'eletrônica', 'eletronica', 'mpb',
+    'funk', 'pop', 'samba', 'forró', 'forro', 'pagode',
+    'rap', 'hip hop', 'reggae', 'blues', 'jazz', 'gospel',
+    'axe', 'brega', 'metal', 'punk', 'classica', 'clássica'
   ];
 
-  const textLower = text.toLowerCase();
+  if (categoriasValidas.includes(catLower)) {
+    return true;
+  }
 
-  for (const loc of localizacoes) {
-    if (textLower.includes(loc)) {
-      return loc;
+  return false;
+}
+
+// Função para normalizar o nome da categoria
+function normalizeCategory(category) {
+  if (!category) return '';
+
+  const catLower = category.toLowerCase().trim();
+
+  const mapeamentoCategorias = {
+    'eletronica': 'Eletrônica',
+    'forro': 'Forró',
+    'hip hop': 'Hip Hop',
+    'classica': 'Clássica',
+    'rock': 'Rock',
+    'sertanejo': 'Sertanejo',
+    'mpb': 'MPB',
+    'funk': 'Funk',
+    'pop': 'Pop',
+    'samba': 'Samba',
+    'forró': 'Forró',
+    'pagode': 'Pagode',
+    'rap': 'Rap',
+    'reggae': 'Reggae',
+    'blues': 'Blues',
+    'jazz': 'Jazz',
+    'gospel': 'Gospel',
+    'axe': 'Axé',
+    'brega': 'Brega',
+    'metal': 'Metal',
+    'punk': 'Punk',
+    'clássica': 'Clássica'
+  };
+
+  return mapeamentoCategorias[catLower] || category;
+}
+
+// Função para buscar eventos por categoria
+async function buscarEventosPorCategoria(categoria) {
+  try {
+    console.log(`Buscando eventos da categoria: ${categoria}`);
+
+    const categoriaExata = await Event.findOne({
+      categoria: new RegExp(`^${categoria}$`, 'i'),
+      status: 'aprovado'
+    }).select('categoria');
+
+    let categoriaParaBuscar = categoria;
+
+    if (categoriaExata) {
+      categoriaParaBuscar = categoriaExata.categoria;
+      console.log(`Categoria exata encontrada: ${categoriaParaBuscar}`);
     }
+
+    const eventos = await Event.find({
+      categoria: new RegExp(categoriaParaBuscar, 'i'),
+      status: 'aprovado',
+      dataInicio: { $gte: new Date().toISOString().split('T')[0] }
+    })
+      .limit(10)
+      .sort({ dataInicio: 1 });
+
+    console.log(`Encontrados ${eventos.length} eventos para ${categoriaParaBuscar}`);
+    return eventos;
+  } catch (error) {
+    console.error('Erro ao buscar eventos por categoria:', error);
+    return [];
+  }
+}
+
+// Função para buscar todas as categorias disponíveis
+async function getAvailableCategories() {
+  try {
+    const categorias = await Event.distinct('categoria', {
+      status: 'aprovado',
+      dataInicio: { $gte: new Date().toISOString().split('T')[0] }
+    });
+
+    const categoriasFiltradas = categorias
+      .filter(cat => cat && cat.trim() !== '')
+      .map(cat => cat.trim())
+      .sort();
+
+    console.log('Categorias disponíveis no banco:', categoriasFiltradas);
+    return categoriasFiltradas;
+  } catch (error) {
+    console.error('Erro ao buscar categorias:', error);
+    return ['Rock', 'Sertanejo', 'Eletrônica', 'MPB', 'Funk', 'Pop', 'Samba', 'Forró'];
+  }
+}
+
+// Função para verificar se uma categoria existe no banco
+async function categoriaExisteNoBanco(categoria) {
+  try {
+    const categoriaNormalizada = normalizeCategory(categoria);
+    const existe = await Event.findOne({
+      categoria: new RegExp(categoriaNormalizada, 'i'),
+      status: 'aprovado'
+    });
+
+    return !!existe;
+  } catch (error) {
+    console.error('Erro ao verificar categoria:', error);
+    return false;
+  }
+}
+
+// Função para gerar próxima pergunta de filtro
+function gerarPerguntaFiltro(estadoAtual) {
+  const filtrosPendentes = [];
+
+  if (!estadoAtual.quantidade) filtrosPendentes.push('quantidade');
+  if (!estadoAtual.faixaPreco) filtrosPendentes.push('faixaPreco');
+  if (!estadoAtual.localizacao) filtrosPendentes.push('localizacao');
+  if (!estadoAtual.dataPreferencia) filtrosPendentes.push('dataPreferencia');
+
+  return filtrosPendentes[0];
+}
+
+// Função para gerar pergunta específica de filtro
+function gerarPerguntaPorFiltro(filtro, categoria) {
+  switch (filtro) {
+    case 'quantidade':
+      return `🎉 Você escolheu ${categoria}! Quantos eventos você gostaria de ver? (ex: 3, 5, 10)`;
+    case 'faixaPreco':
+      return `💰 Qual sua faixa de preço preferida para ${categoria}? (ex: até 50, entre 50-100, acima de 100)`;
+    case 'localizacao':
+      return `📍 Em qual cidade você gostaria de encontrar eventos de ${categoria}?`;
+    case 'dataPreferencia':
+      return `📅 Você prefere eventos de ${categoria} em alguma data específica? (ex: este fim de semana, próxima semana, qualquer data)`;
+    default:
+      return `Vamos ajustar sua busca por ${categoria}!`;
+  }
+}
+
+// Função para extrair faixa de preço da mensagem
+function extrairFaixaPreco(mensagem) {
+  const mensagemLower = mensagem.toLowerCase();
+
+  // Padrões para extração de faixa de preço
+  if (mensagemLower.includes('até') || mensagemLower.includes('até')) {
+    const match = mensagemLower.match(/(até|até)\s*(\d+)/);
+    if (match && match[2]) {
+      return { min: 0, max: parseInt(match[2]) };
+    }
+  }
+
+  if (mensagemLower.includes('entre')) {
+    const match = mensagemLower.match(/entre\s*(\d+)\s*e\s*(\d+)/);
+    if (match && match[1] && match[2]) {
+      return { min: parseInt(match[1]), max: parseInt(match[2]) };
+    }
+
+    const matchHifen = mensagemLower.match(/(\d+)\s*-\s*(\d+)/);
+    if (matchHifen && matchHifen[1] && matchHifen[2]) {
+      return { min: parseInt(matchHifen[1]), max: parseInt(matchHifen[2]) };
+    }
+  }
+
+  if (mensagemLower.includes('acima') || mensagemLower.includes('mais de')) {
+    const match = mensagemLower.match(/(acima|mais de)\s*(\d+)/);
+    if (match && match[2]) {
+      return { min: parseInt(match[2]), max: 1000 }; // Limite máximo arbitrário
+    }
+  }
+
+  // Extrair números simples
+  const numeros = mensagemLower.match(/\d+/g);
+  if (numeros && numeros.length === 1) {
+    return { min: 0, max: parseInt(numeros[0]) };
+  }
+
+  if (numeros && numeros.length >= 2) {
+    return { min: parseInt(numeros[0]), max: parseInt(numeros[1]) };
   }
 
   return null;
 }
 
+// Função para extrair localização da mensagem
+function extrairLocalizacao(mensagem, entities) {
+  const mensagemLower = mensagem.toLowerCase();
 
-function extractCategoriaManual(text) {
-  const categoriasComuns = [
-    'rock', 'sertanejo', 'funk', 'pop', 'eletrônica', 'eletronica',
-    'mpb', 'samba', 'pagode', 'forró', 'forro', 'rap', 'hip hop',
-    'reggae', 'jazz', 'blues', 'clássica', 'classica', 'gospel',
-    "show"
+
+
+  // Primeiro tenta pelas entidades do Wit.ai
+  const localizacaoEntity = entities['localizacao:localizacao']?.[0]?.value;
+  if (localizacaoEntity) {
+    return localizacaoEntity;
+  }
+
+  const witLocationEntity = entities['wit$location:location']?.[0]?.value;
+  if (witLocationEntity) {
+    console.log('Localização extraída por entidade built-in:', witLocationEntity);
+    return witLocationEntity;
+  }
+
+  const cidadesBrasileiras = [
+    'são paulo', 'rio de janeiro', 'belo horizonte', 'brasília', 'salvador',
+    'fortaleza', 'recife', 'porto alegre', 'curitiba', 'goiânia', 'belém',
+    'manaus', 'vitória', 'florianópolis', 'natal', 'joão pessoa', 'maceió',
+    'campo grande', 'cuiabá', 'teresina', 'aracaju', 'palmas', 'porto velho',
+    'rio branco', 'macapá', 'boavista'
   ];
 
-  const textLower = text.toLowerCase();
-
-  for (const cat of categoriasComuns) {
-    if (textLower.includes(cat)) {
-      return cat;
+  for (const cidade of cidadesBrasileiras) {
+    if (mensagemLower.includes(cidade)) {
+      console.log('Localização extraída por lista de cidades:', cidade);
+      return cidade;
     }
+  }
+
+  // Fallback: procura por padrões comuns de cidades
+  const padroesCidades = [
+    /(?:em|no|na|de)\s+([a-zA-ZÀ-ÿ\s]{3,})/i,
+    /(?:em|no|na|de)\s+([a-zA-ZÀ-ÿ]+(?:\s+[a-zA-ZÀ-ÿ]+){1,2})/i,
+    /📍\s*([a-zA-ZÀ-ÿ\s]+)/i,
+    /cidade\s+(?:de|do|da)?\s*([a-zA-ZÀ-ÿ\s]+)/i
+  ];
+
+  for (const padrao of padroesCidades) {
+    const match = mensagem.match(padrao);
+    if (match && match[1]) {
+      const localExtraido = match[1].trim();
+      console.log('Localização extraída por padrão regex:', localExtraido);
+      return localExtraido;
+    }
+  }
+
+  const mapeamentoEstados = {
+    'são paulo': 'SP', 'sao paulo': 'SP', 'sp': 'SP',
+    'rio de janeiro': 'RJ', 'rj': 'RJ',
+    'minas gerais': 'MG', 'mg': 'MG',
+    'bahia': 'BA', 'ba': 'BA',
+    'ceará': 'CE', 'ceara': 'CE', 'ce': 'CE',
+    'paraná': 'PR', 'parana': 'PR', 'pr': 'PR',
+    'rio grande do sul': 'RS', 'rs': 'RS',
+    'pernambuco': 'PE', 'pe': 'PE',
+    'goiás': 'GO', 'goias': 'GO', 'go': 'GO'
+  };
+
+  if (localExtraido && mapeamentoEstados[localExtraido.toLowerCase()]) {
+    return mapeamentoEstados[localExtraido.toLowerCase()];
+  }
+
+  console.log('Nenhuma localização encontrada na mensagem:', mensagem);
+  return localExtraido;
+}
+
+// Função para extrair data da mensagem
+function extrairDataPreferencia(mensagem) {
+  const mensagemLower = mensagem.toLowerCase();
+
+  if (mensagemLower.includes('fim de semana') || mensagemLower.includes('final de semana')) {
+    return 'fim_de_semana';
+  }
+  if (mensagemLower.includes('próxima semana') || mensagemLower.includes('proxima semana')) {
+    return 'proxima_semana';
+  }
+  if (mensagemLower.includes('este mês') || mensagemLower.includes('esse mês')) {
+    return 'este_mes';
+  }
+  if (mensagemLower.includes('qualquer') || mensagemLower.includes('não importa')) {
+    return 'qualquer';
   }
 
   return null;
 }
-// Função para processar a resposta do Wit.ai
-// Função melhorada para processar respostas
-function processWitResponse(data) {
-  console.log('Resposta Wit.ai:', JSON.stringify(data, null, 2));
 
-  if (!data.intents || data.intents.length === 0) {
-    return {
-      text: 'Desculpe, não entendi. Pode reformular ou escolher uma opção abaixo? 🤔',
-      showCommands: true
+// Função para buscar eventos com filtros aplicados
+async function buscarEventosComFiltros(filtros) {
+  try {
+    const query = {
+      status: 'aprovado',
+      dataInicio: { $gte: new Date().toISOString().split('T')[0] }
     };
-  }
 
-  const intent = data.intents[0].name;
-  const confidence = data.intents[0].confidence;
-
-  // Confiança mínima de 0.5
-  if (confidence < 0.5) {
-    return {
-      text: 'Não tenho certeza do que você quer dizer. Que tal usar um dos comandos abaixo?',
-      showCommands: true
-    };
-  }
-
-  // Respostas mais ricas e contextualizadas
-  const responses = {
-    saudacao: {
-      text: 'E aí! 🎧 Bora subir essa vibe hoje? Sou seu assistente da NaVibe! 🚀',
-      showCommands: true
-    },
-    despedida: {
-      text: 'Até logo! Foi ótimo conversar com você! 👋 Volte sempre que precisar!',
-      showCommands: false
-    },
-    ajuda: {
-      text: 'Claro! Posso ajudar com:\n• 📅 Informações sobre eventos\n• 🎵 Buscar eventos por categoria\n• 🌆 Eventos por cidade\n• 🎫 Detalhes de ingressos\n• ❓ Dúvidas gerais',
-      showCommands: true
-    },
-    evento_pergunta: (entities) => {
-      if (entities?.localizacao) {
-        return {
-          text: `🎪 Vou buscar eventos em ${entities.localizacao[0].value.toUpperCase()} para você! 🗺️`,
-          showCommands: false
-        };
-      }
-      return {
-        text: 'Não consegui encontrar o evento',
-        showCommands: true
-      };
-    },
-    evento_busca: {
-      text: '🔍 Buscando os melhores eventos para você...',
-      showCommands: false
-    },
-    categorias_pergunta: {
-      text: 'Vou buscar as categorias disponíveis para você! 🎵',
-      showCommands: false
-    },
-    evento_proximos: {
-      text: '📅 Listando os próximos eventos imperdíveis!',
-      showCommands: false
-    },
-    evento_localizacao: (entities) => {
-      const local = entities?.localizacao?.[0]?.value || 'essa região';
-      return {
-        text: `🌍 Procurando eventos em ${local.toUpperCase()}...`,
-        showCommands: false
-      };
-    },
-    evento_categoria: (entities) => {
-      const categoria = entities?.categoria?.[0]?.value || 'essa categoria';
-      return {
-        text: `🎵 Buscando eventos de ${categoria}...`,
-        showCommands: false
-      };
-    },
-    default: {
-      text: 'Interessante! Posso te ajudar com eventos, categorias, cidades ou informações gerais! 🎪',
-      showCommands: true
+    // Filtro por categoria
+    if (filtros.categoria) {
+      query.categoria = new RegExp(filtros.categoria, 'i');
     }
-  };
 
-
-
-  const getResponse = () => {
-    if (typeof responses[intent] === 'function') {
-      return responses[intent](data.entities);
-    }
-    return responses[intent] || responses.default;
-  };
-
-  return getResponse();
-}
-
-// Controlador principal para o Wit.ai
-const witaiController = {
-  processMessage: async (req, res) => {
-    try {
-      const { message } = req.body;
-
-      console.log('Recebida mensagem:', message);
-
-      if (!message || message.trim() === '') {
-        return res.status(400).json({
-          success: false,
-          error: 'Mensagem não pode estar vazia'
-        });
-      }
-
-      // Verifica se o token está configurado
-      if (!process.env.WIT_AI_SERVER_TOKEN) {
-        console.error('WIT_AI_SERVER_TOKEN não está configurado');
-        return res.status(500).json({
-          success: false,
-          error: 'Serviço de chat não configurado'
-        });
-      }
-
-      // Chamada para a API do Wit.ai
-      const response = await axios.get(
-        `https://api.wit.ai/message?v=20240520&q=${encodeURIComponent(message)}`,
+    // Filtro por faixa de preço
+    if (filtros.faixaPreco) {
+      query.$or = [
         {
-          headers: {
-            'Authorization': `Bearer ${process.env.WIT_AI_SERVER_TOKEN}`,
-            'Content-Type': 'application/json'
-          },
-          timeout: 10000 // 10 segundos de timeout
-        }
-      );
-
-      const witData = response.data;
-
-      if (!witData.intents || witData.intents.length === 0) {
-        console.log('Nenhuma intenção detectada - aplicando fallback...');
-        
-        // Verifica se há palavras-chave de eventos na mensagem
-        const hasEventKeywords = /evento|show|festival|concerto|festa|musica|banda|dj|shows|eventos/i.test(witData.text);
-        const hasCategoria = extractCategoriaManual(witData.text);
-        const hasLocalizacao = extractLocalizacaoManual(witData.text);
-        
-        if (hasEventKeywords || hasCategoria || hasLocalizacao) {
-          console.log('Fallback: Detectadas palavras-chave de evento');
-          // Força a intenção de busca de eventos
-          witData.intents = [{ name: 'evento_busca', confidence: 0.6 }];
-        }
-      }
-
-      // Processar a resposta do Wit.ai
-      let botReply = processWitResponse(witData);
-
-      console.log('Resposta processada:', botReply);
-
-      let eventos = null;
-      let categorias = null;
-
-      if (witData.intents?.[0]?.name === 'categorias_pergunta') {
-        categorias = await Event.distinct('categoria', { status: 'aprovado' });
-        console.log('Categorias encontradas:', categorias);
-
-        botReply = {
-          text: `Encontrei ${categorias.length} categorias disponíveis! 🎵`,
-          showCommands: false
-        };
-      }
-      else if (witData.intents?.[0]?.name === 'evento_pergunta' ||
-        witData.intents?.[0]?.name === 'evento_busca' ||
-        witData.intents?.[0]?.name === 'evento_proximos' ||
-        witData.intents?.[0]?.name === 'evento_localizacao' ||
-        witData.intents?.[0]?.name === 'evento_categoria' || // ← Adicione esta linha
-        witData.entities?.evento ||
-        witData.entities?.categoria ||
-        witData.entities?.localizacao ||
-        extractCategoriaManual(witData.text) || // ← Adicione esta condição
-        extractLocalizacaoManual(witData.text)) { 
-
-        const filter = { status: 'aprovado' };
-
-        if (witData.entities?.categoria?.[0]?.value) {
-          filter.categoria = witData.entities.categoria[0].value;
-        } else {
-          console.log('Texto original:', witData.text);
-          console.log('Categoria detectada pelo Wit:', witData.entities?.categoria?.[0]?.value);
-          console.log('Categoria extraída manualmente:', extractCategoriaManual(witData.text));
-          console.log('Filtro final aplicado:', filter);
-          const categoriaManual = extractCategoriaManual(witData.text);
-          if (categoriaManual) {
-             filter.categoria = { $regex: categoriaManual, $options: 'i' };
+          valorIngressoInteira: {
+            $gte: filtros.faixaPreco.min,
+            $lte: filtros.faixaPreco.max
+          }
+        },
+        {
+          valorIngressoMeia: {
+            $gte: filtros.faixaPreco.min,
+            $lte: filtros.faixaPreco.max
           }
         }
+      ];
+    }
 
-        let localizacao = null;
-        if (witData.entities?.localizacao?.[0]?.value) {
-          localizacao = witData.entities.localizacao[0].value;
-        } else {
-          // Fallback: extrair localização manualmente do texto
-          localizacao = extractLocalizacaoManual(witData.text);
-        }
+    // Filtro por localização
+    if (filtros.localizacao) {
+      const localizacaoRegex = new RegExp(filtros.localizacao, 'i');
 
-        if (localizacao) {
-          filter.$or = [
-            { cidade: { $regex: localizacao, $options: 'i' } },
-            { estado: { $regex: localizacao, $options: 'i' } }
-          ];
-        }
+      query.$or = [
+        { cidade: localizacaoRegex },
+        { estado: localizacaoRegex },
+        { bairro: localizacaoRegex }
+      ];
 
-        if (witData.entities?.localizacao?.[0]?.value) {
-          const localizacao = witData.entities.localizacao[0].value;
-
-          // Buscar tanto por cidade quanto por estado
-          filter.$or = [
-            { cidade: { $regex: localizacao, $options: 'i' } },
-            { estado: { $regex: localizacao, $options: 'i' } }
-          ];
-        }
-
-        filter.dataInicio = { $gte: new Date().toISOString().split('T')[0] };
-
-        eventos = await Event.find(filter)
-          .sort({ dataInicio: 1 })
-          .limit(5);
-
-        console.log('Eventos encontrados:', eventos.length);
-        console.log('Filtro utilizado:', filter);
-        console.log('Localização detectada:', localizacao);
-
-
+      // Se o usuário pesquisar por "são paulo", também buscar por "SP"
+      if (filtros.localizacao.toLowerCase().includes('são paulo') ||
+        filtros.localizacao.toLowerCase().includes('sao paulo')) {
+        query.$or.push({ estado: /SP/i });
       }
 
-      res.json({
+      // Mapeamento de estados
+      const mapeamentoEstados = {
+        'são paulo': 'SP', 'sao paulo': 'SP', 'sp': 'SP',
+        'rio de janeiro': 'RJ', 'rj': 'RJ',
+        'minas gerais': 'MG', 'mg': 'MG',
+        // adicione outros estados...
+      };
+
+      const estadoMapeado = mapeamentoEstados[filtros.localizacao.toLowerCase()];
+      if (estadoMapeado) {
+        query.$or.push({ estado: estadoMapeado });
+      }
+    }
+
+    // Filtro por data (implementação básica)
+    if (filtros.dataPreferencia === 'fim_de_semana') {
+      // Lógica para fim de semana seria mais complexa na realidade
+      query.dataInicio = { $gte: new Date().toISOString().split('T')[0] };
+    }
+
+    const limite = filtros.quantidade || 10;
+
+    console.log('Query final para busca:', JSON.stringify(query, null, 2));
+
+    const eventos = await Event.find(query)
+      .limit(limite)
+      .sort({ dataInicio: 1 });
+
+    console.log(`Encontrados ${eventos.length} eventos com filtros:`, filtros);
+    return eventos;
+  } catch (error) {
+    console.error('Erro ao buscar eventos com filtros:', error);
+    return [];
+  }
+}
+
+// Controller principal
+// Controller principal
+exports.processMessageWithState = async (req, res) => {
+  try {
+    const { message, state = {} } = req.body;
+
+    console.log('Mensagem recebida:', message);
+    console.log('Estado atual:', state);
+
+    let categoriasDisponiveis = await getAvailableCategories();
+
+    // PRIMEIRO: Processar resposta do Wit.ai para ter acesso às entities
+    let witResponse;
+    try {
+      witResponse = await witClient.message(message);
+      console.log('Resposta do Wit.ai:', JSON.stringify(witResponse, null, 2));
+    } catch (witError) {
+      console.error('Erro no Wit.ai:', witError);
+      witResponse = { intents: [], entities: {} };
+    }
+
+    const intent = witResponse.intents[0]?.name || 'default';
+    const confidence = witResponse.intents[0]?.confidence || 0;
+    const entities = witResponse.entities || {};
+
+    // CASO 1: Usuário está respondendo a uma pergunta de filtro
+    if (state.waitingForFilter) {
+      const filtroAtual = state.waitingForFilter;
+      let valorFiltro = null;
+      let updatedState = { ...state };
+
+      console.log(`Processando resposta para filtro: ${filtroAtual}`);
+
+      switch (filtroAtual) {
+        case 'quantidade':
+          // Primeiro tenta pelas entidades do Wit.ai
+          const numeroEntity = entities['wit$number:number']?.[0]?.value;
+          if (numeroEntity) {
+            valorFiltro = parseInt(numeroEntity);
+            updatedState.quantidade = Math.min(Math.max(valorFiltro, 1), 20);
+            console.log(`Quantidade extraída por entidade: ${valorFiltro}`);
+          } else {
+            // Fallback: extrair número do texto manualmente
+            const numeros = message.match(/\d+/);
+            if (numeros && numeros[0]) {
+              valorFiltro = parseInt(numeros[0]);
+              updatedState.quantidade = Math.min(Math.max(valorFiltro, 1), 20);
+              console.log(`Quantidade extraída manualmente: ${valorFiltro}`);
+            } else {
+              // Se não conseguiu extrair número, pedir novamente
+              return res.json({
+                success: true,
+                reply: {
+                  text: `Não entendi a quantidade. Quantos eventos de ${state.categoria} você gostaria de ver? (ex: 3, 5, 10)`,
+                  eventos: [],
+                  showCommands: false,
+                  state: updatedState,
+                  categorias: categoriasDisponiveis
+                },
+                intent: 'responder_filtro',
+                confidence: 1.0,
+                categorias: categoriasDisponiveis
+              });
+            }
+          }
+          break;
+
+        case 'faixaPreco':
+          valorFiltro = extrairFaixaPreco(message);
+          if (valorFiltro) {
+            updatedState.faixaPreco = valorFiltro;
+            console.log(`Faixa de preço extraída:`, valorFiltro);
+          } else {
+            return res.json({
+              success: true,
+              reply: {
+                text: `Não entendi a faixa de preço. Qual valor você pretende gastar em ${state.categoria}? (ex: até 50, entre 50-100)`,
+                eventos: [],
+                showCommands: false,
+                state: updatedState,
+                categorias: categoriasDisponiveis
+              },
+              intent: 'responder_filtro',
+              confidence: 1.0,
+              categorias: categoriasDisponiveis
+            });
+          }
+          break;
+
+        case 'localizacao':
+          valorFiltro = extrairLocalizacao(message, entities);
+          if (valorFiltro) {
+            updatedState.localizacao = valorFiltro;
+            console.log(`Localização extraída: ${valorFiltro}`);
+          } else {
+            return res.json({
+              success: true,
+              reply: {
+                text: `Não entendi a localização. Em qual cidade você quer eventos de ${state.categoria}?`,
+                eventos: [],
+                showCommands: false,
+                state: updatedState,
+                categorias: categoriasDisponiveis
+              },
+              intent: 'responder_filtro',
+              confidence: 1.0,
+              categorias: categoriasDisponiveis
+            });
+          }
+          break;
+
+        case 'dataPreferencia':
+          valorFiltro = extrairDataPreferencia(message);
+          if (valorFiltro) {
+            updatedState.dataPreferencia = valorFiltro;
+            console.log(`Preferência de data extraída: ${valorFiltro}`);
+          } else {
+            return res.json({
+              success: true,
+              reply: {
+                text: `Não entendi a preferência de data. Quando você quer eventos de ${state.categoria}? (ex: este fim de semana, próxima semana)`,
+                eventos: [],
+                showCommands: false,
+                state: updatedState,
+                categorias: categoriasDisponiveis
+              },
+              intent: 'responder_filtro',
+              confidence: 1.0,
+              categorias: categoriasDisponiveis
+            });
+          }
+          break;
+      }
+
+      // Determinar próximo filtro
+      updatedState.waitingForFilter = gerarPerguntaFiltro(updatedState);
+
+      let replyText = '';
+      let eventos = [];
+
+      if (updatedState.waitingForFilter) {
+        // Ainda há filtros pendentes
+        replyText = gerarPerguntaPorFiltro(updatedState.waitingForFilter, updatedState.categoria);
+      } else {
+        eventos = await buscarEventosComFiltros(updatedState);
+        if (eventos.length > 0) {
+          replyText = `🎉 Encontrei ${eventos.length} evento(s) de ${updatedState.categoria} com seus filtros!`;
+          categoriasDisponiveis = [];
+        } else {
+          replyText = `😔 Não encontrei eventos de ${updatedState.categoria} com esses filtros. Que tal tentar outros critérios?`;
+        }
+        // Atualizar estado SEM eventosEncontrados (vamos usar o array principal)
+        updatedState.showCommands = true;
+      }
+
+      return res.json({
         success: true,
-        reply: botReply, // Agora é um objeto {text, showCommands}
-        intent: witData.intents?.[0]?.name || 'unknown',
-        confidence: witData.intents?.[0]?.confidence || 0,
-        entities: witData.entities || {},
-        eventos: eventos || [],
-        categorias: categorias || []
-      });
-
-    } catch (error) {
-      console.error('Erro Wit.ai:', error.message);
-      console.error('Detalhes do erro:', error.response?.data || 'Sem dados de resposta');
-      console.error('Status do erro:', error.response?.status);
-
-      res.status(500).json({
-        success: false,
-        error: 'Erro ao processar mensagem',
-        details: process.env.NODE_ENV === 'development' ? error.message : undefined
+        reply: {
+          text: replyText,
+          eventos: eventos, // ← GARANTIR que eventos estão aqui
+          showCommands: !updatedState.waitingForFilter,
+          state: updatedState,
+          categorias: categoriasDisponiveis
+        },
+        intent: 'responder_filtro',
+        confidence: 1.0,
+        categorias: categoriasDisponiveis,
+        eventos: eventos // ← E também aqui para compatibilidade
       });
     }
-  },
 
-  // Rota de saúde para verificar se o Wit.ai está funcionando
-  healthCheck: async (req, res) => {
-    try {
-      // Verifica se o token está configurado
-      if (!process.env.WIT_AI_SERVER_TOKEN) {
-        return res.status(500).json({
-          success: false,
-          error: 'WIT_AI_SERVER_TOKEN não está configurado'
+    // CASO 2: Seleção de categoria através de botão
+    if (isValidCategory(message)) {
+      const categoriaSelecionada = normalizeCategory(message);
+      const categoriaExiste = await categoriaExisteNoBanco(categoriaSelecionada);
+
+      if (!categoriaExiste) {
+        return res.json({
+          success: true,
+          reply: {
+            text: `😔 A categoria "${categoriaSelecionada}" não foi encontrada. Que tal tentar uma dessas?`,
+            eventos: [],
+            showCommands: true,
+            state: state,
+            categorias: categoriasDisponiveis
+          },
+          intent: 'categoria_nao_encontrada',
+          confidence: 1.0,
+          categorias: categoriasDisponiveis
         });
       }
 
-      // Testa uma mensagem simples para verificar a conexão
-      const response = await axios.get(
-        `https://api.wit.ai/message?v=20240520&q=Olá`,
-        {
-          headers: {
-            'Authorization': `Bearer ${process.env.WIT_AI_SERVER_TOKEN}`,
-            'Content-Type': 'application/json'
-          },
-          timeout: 10000
-        }
-      );
+      // Iniciar fluxo de filtros
+      const proximoFiltro = gerarPerguntaFiltro(state);
+      const updatedState = {
+        ...state,
+        categoria: categoriaSelecionada,
+        waitingForFilter: proximoFiltro
+      };
 
-      res.json({
+      let replyText = '';
+      let eventos = [];
+
+      if (proximoFiltro) {
+        replyText = gerarPerguntaPorFiltro(proximoFiltro, categoriaSelecionada);
+      } else {
+        // Buscar eventos diretamente se não há filtros pendentes
+        eventos = await buscarEventosPorCategoria(categoriaSelecionada);
+        replyText = eventos.length > 0
+          ? `🎉 Encontrei ${eventos.length} evento(s) de ${categoriaSelecionada}!`
+          : `😔 Não encontrei eventos de ${categoriaSelecionada} no momento.`;
+      }
+
+      return res.json({
         success: true,
-        status: 'Wit.ai conectado com sucesso',
-        intent: response.data.intents?.[0]?.name || 'none'
-      });
-    } catch (error) {
-      console.error('Erro no health check:', error.message);
-      res.status(500).json({
-        success: false,
-        error: 'Falha na conexão com Wit.ai',
-        details: error.message
+        reply: {
+          text: replyText,
+          eventos: eventos,
+          showCommands: !proximoFiltro,
+          state: updatedState,
+          categorias: categoriasDisponiveis
+        },
+        intent: 'selecionar_categoria',
+        confidence: 1.0,
+        categorias: categoriasDisponiveis
       });
     }
-  },
 
-  // Endpoint para obter informações sobre as intenções configuradas
-  getIntentsInfo: (req, res) => {
+    // CASO 3: Processamento normal pelo Wit.ai
+    let replyText = '';
+    let eventos = [];
+    let showCommands = true;
+    let updatedState = { ...state };
+
+    // Processamento baseado na intenção
+    switch (intent) {
+      case 'buscar_eventos':
+        const categoriaEntity = entities['categoria:categoria']?.[0]?.value;
+        const localizacaoEntity = entities['localizacao:localizacao']?.[0]?.value;
+
+        if (categoriaEntity) {
+          const categoriaNormalizada = normalizeCategory(categoriaEntity);
+          eventos = await buscarEventosPorCategoria(categoriaNormalizada);
+          replyText = eventos.length > 0
+            ? `🎵 Encontrei ${eventos.length} evento(s) de ${categoriaNormalizada}!`
+            : `😔 Não encontrei eventos de ${categoriaNormalizada}. Que tal tentar outra categoria?`;
+        } else if (localizacaoEntity) {
+          eventos = await Event.find({
+            cidade: new RegExp(localizacaoEntity, 'i'),
+            status: 'aprovado'
+          }).limit(10);
+          replyText = eventos.length > 0
+            ? `📍 Encontrei ${eventos.length} evento(s) em ${localizacaoEntity}!`
+            : `😔 Não encontrei eventos em ${localizacaoEntity}.`;
+        } else {
+          eventos = await Event.find({
+            status: 'aprovado',
+            dataInicio: { $gte: new Date().toISOString().split('T')[0] }
+          }).limit(10);
+          replyText = eventos.length > 0
+            ? `🎪 Encontrei ${eventos.length} evento(s)!`
+            : '😔 Não encontrei eventos no momento.';
+        }
+        break;
+
+      case 'listar_categorias':
+        replyText = categoriasDisponiveis.length > 0
+          ? '🎵 Aqui estão as categorias disponíveis:'
+          : '😔 Não encontrei categorias disponíveis no momento.';
+        break;
+
+      case 'saudacao':
+        replyText = 'E aí! Bora subir essa vibe hoje? Que tipo de evento você está procurando? 🎪';
+        break;
+
+      case 'ajuda':
+        replyText = 'Claro! Posso te ajudar a:\n\n' +
+          '🎵 • Encontrar eventos por categoria\n' +
+          '📍 • Buscar eventos por cidade\n' +
+          '📅 • Ver eventos por data\n' +
+          '💰 • Filtrar por preço\n\n' +
+          'O que você gostaria de fazer?';
+        break;
+
+      case 'agradecimento':
+        replyText = 'Por nada! Fico feliz em ajudar. 😊\nPrecisa de mais alguma coisa?';
+        break;
+
+      default:
+        const mensagemLower = message.toLowerCase();
+
+        if (mensagemLower.includes('categorias') ||
+          mensagemLower.includes('categoria') ||
+          mensagemLower.includes('tipos') ||
+          mensagemLower.includes('que categorias')) {
+          replyText = '🎵 Aqui estão as categorias disponíveis:';
+        } else if (mensagemLower.includes('eventos') ||
+          mensagemLower.includes('shows') ||
+          mensagemLower.includes('festas')) {
+          eventos = await Event.find({
+            status: 'aprovado',
+            dataInicio: { $gte: new Date().toISOString().split('T')[0] }
+          }).limit(5);
+          replyText = eventos.length > 0
+            ? `🎪 Encontrei ${eventos.length} evento(s)!`
+            : '😔 Não encontrei eventos no momento.';
+        } else {
+          replyText = 'Interessante! Posso te ajudar com eventos, categorias, cidades ou informações gerais! 🎪';
+        }
+    }
+
     res.json({
       success: true,
-      intents: [
-        {
-          name: 'saudacao',
-          description: 'Saudações e cumprimentos',
-          examples: ['oi', 'olá', 'bom dia', 'e aí']
-        },
-        {
-          name: 'despedida',
-          description: 'Despedidas',
-          examples: ['tchau', 'até logo', 'flw', 'valeu']
-        },
-        {
-          name: 'ajuda',
-          description: 'Pedidos de ajuda',
-          examples: ['preciso de ajuda', 'como funciona', 'me ajude']
-        },
-        {
-          name: 'evento_pergunta',
-          description: 'Perguntas sobre eventos',
-          examples: ['quais eventos', 'programação', 'shows']
-        },
-        {
-          name: 'produto_pergunta',
-          description: 'Perguntas sobre produtos',
-          examples: ['produtos', 'cds', 'vinis', 'merchandising']
-        }
-      ]
+      reply: {
+        text: replyText,
+        eventos: eventos,
+        categorias: eventos.length > 0 ? [] : categoriasDisponiveis,
+        showCommands: showCommands,
+        state: updatedState
+      },
+      intent: intent,
+      confidence: confidence,
+      entities: entities,
+      categorias: eventos.length > 0 ? [] : categoriasDisponiveis,
+    });
+
+  } catch (error) {
+    console.error('Erro no processMessageWithState:', error);
+
+    const categoriasDisponiveis = await getAvailableCategories();
+
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      reply: {
+        text: 'Estou com dificuldades técnicas. Tente novamente em instantes! 🛠️',
+        categorias: categoriasDisponiveis,
+        showCommands: true
+      },
+      categorias: categoriasDisponiveis
     });
   }
 };
 
-module.exports = witaiController;
+// Health check
+exports.healthCheck = async (req, res) => {
+  try {
+    await witClient.message('teste');
+    const categorias = await getAvailableCategories();
+
+    res.json({
+      success: true,
+      witai: 'conectado',
+      database: 'conectado',
+      categorias: categorias
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      witai: 'erro',
+      database: 'erro',
+      error: error.message
+    });
+  }
+};
+
+// Obter informações sobre intenções
+exports.getIntentsInfo = async (req, res) => {
+  try {
+    const categorias = await getAvailableCategories();
+
+    res.json({
+      intents: [
+        'buscar_eventos',
+        'listar_categorias',
+        'saudacao',
+        'ajuda',
+        'agradecimento',
+        'responder_filtro',
+        'selecionar_categoria'
+      ],
+      entities: ['categoria', 'localizacao', 'data', 'preco', 'quantidade'],
+      categorias_disponiveis: categorias
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};

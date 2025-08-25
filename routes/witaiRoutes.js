@@ -13,8 +13,11 @@ const checkWitaiConfig = (req, res, next) => {
   next();
 };
 
-// Rota principal para processar mensagens
-router.post('/chat', checkWitaiConfig, witaiController.processMessage);
+// Rota principal para processar mensagens (MODIFICADA)
+router.post('/chat', checkWitaiConfig, (req, res) => {
+  // Usar a função processMessage modificada que aceita estado
+  witaiController.processMessageWithState(req, res);
+});
 
 // Rota de saúde para verificar a conexão com Wit.ai
 router.get('/health', checkWitaiConfig, witaiController.healthCheck);

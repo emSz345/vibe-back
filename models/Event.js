@@ -18,7 +18,8 @@ const eventSchema = new mongoose.Schema({
   dataInicio: { type: String, required: true }, // Mantenha como String se o front estiver enviando assim
   horaInicio: { type: String, required: true },
   horaTermino: { type: String, required: true },
-  dataFim: { type: String }, // NOVO - Verifique se este campo é 'dataFim' ou 'dataFimVendas'
+  dataFimVendas: { type: String }, // NOVO - Verifique se este campo é 'dataFim' ou 'dataFimVendas'
+  dataInicioVendas:   { type: String },
   valorIngressoInteira: { type: Number },
   valorIngressoMeia: { type: Number },
   quantidadeInteira: { type: Number },

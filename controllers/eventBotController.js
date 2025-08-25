@@ -40,6 +40,78 @@ const eventBotController = {
     }
   },
 
+  // Buscar eventos com múltiplos filtros
+searchEventsWithFilters: async (req, res) => {
+  try {
+    const {
+      categoria,
+      limit = 5,
+      valorIngressoInteira,
+      valorIngressoMeia,
+      localizacao,
+      dataInicio,
+      status = 'aprovado'
+    } = req.query;
+    
+    let filter = { status: status };
+    
+    // Filtro por categoria
+    if (categoria && categoria !== 'todos') {
+      filter.categoria = categoria;
+    }
+    
+    // Filtro por preço de ingresso
+    if (valorIngressoInteira) {
+      const priceFilter = JSON.parse(valorIngressoInteira);
+      filter.valorIngressoInteira = {
+        $gte: priceFilter.min,
+        $lte: priceFilter.max
+      };
+    }
+    
+    if (valorIngressoMeia) {
+      const priceFilter = JSON.parse(valorIngressoMeia);
+      filter.valorIngressoMeia = {
+        $gte: priceFilter.min,
+        $lte: priceFilter.max
+      };
+    }
+    
+    // Filtro por localização
+    if (localizacao && localizacao !== 'qualquer') {
+      filter.$or = [
+        { cidade: { $regex: localizacao, $options: 'i' } },
+        { estado: { $regex: localizacao, $options: 'i' } }
+      ];
+    }
+    
+    // Filtro por data
+    if (dataInicio) {
+      if (dataInicio === 'proxima') {
+        filter.dataInicio = { $gte: new Date().toISOString().split('T')[0] };
+      }
+      // Para 'qualquer', não aplicamos filtro de data
+    }
+
+    const eventos = await Event.find(filter)
+      .sort({ dataInicio: 1 })
+      .limit(parseInt(limit));
+
+    res.json({
+      success: true,
+      eventos: eventos,
+      total: eventos.length
+    });
+
+  } catch (error) {
+    console.error('Erro ao buscar eventos com filtros:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Erro ao buscar eventos'
+    });
+  }
+},
+
   // Buscar próximos eventos
   getUpcomingEvents: async (req, res) => {
     try {

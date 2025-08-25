@@ -22,15 +22,15 @@ const authenticateToken = (req, res, next) => {
       return res.status(403).json({ message: 'Token inválido' });
     }
 
-     if (!decoded.userId && !decoded.id) {
+    if (!decoded.userId && !decoded.id) {
       return res.status(403).json({ message: 'Estrutura do token inválida' });
     }
-    
+
     // CORREÇÃO TEMPORÁRIA: Use decoded.id se userId não existir
     req.user = {
       userId: decoded.userId
     };
-    
+
     next();
   });
 };
@@ -59,7 +59,7 @@ router.get('/meus-eventos', authenticateToken, async (req, res) => {
   try {
     // O userId agora vem do token JWT decodificado
     const userId = req.user.userId;
-    
+
     if (!userId) {
       return res.status(400).json({ message: 'ID do usuário não encontrado no token' });
     }
@@ -76,7 +76,7 @@ router.delete('/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     const userId = req.user.userId;
-    
+
     // Verifique se o evento existe
     const evento = await Event.findById(id);
     if (!evento) {
@@ -116,13 +116,13 @@ router.get('/:id', authenticateToken, async (req, res) => {
     if (!evento) {
       return res.status(404).json({ message: 'Evento não encontrado.' });
     }
-    
+
     // Verificar se o usuário é o dono do evento
     const userId = req.user.userId;
     if (evento.criadoPor.toString() !== userId) {
       return res.status(403).json({ message: 'Acesso negado - você não é o dono deste evento' });
     }
-    
+
     res.status(200).json(evento);
   } catch (error) {
     res.status(500).json({ message: 'Erro ao buscar evento por ID', error: error.message });
@@ -131,43 +131,43 @@ router.get('/:id', authenticateToken, async (req, res) => {
 
 // Rota para atualização de status do evento
 router.patch('/atualizar-status/:id', async (req, res) => {
-    try {
-        const { id } = req.params;
-        const { status, motivo } = req.body;
+  try {
+    const { id } = req.params;
+    const { status, motivo } = req.body;
 
-        console.log('Recebido:', { id, status, motivo });
+    console.log('Recebido:', { id, status, motivo });
 
-        const evento = await Event.findById(id).populate('criadoPor');
-        
-        if (!evento) {
-            return res.status(404).json({ message: 'Evento não encontrado.' });
-        }
+    const evento = await Event.findById(id).populate('criadoPor');
 
-        evento.status = status;
-        await evento.save();
-
-        // Se for rejeição e houver motivo, envia email
-        if (status === 'rejeitado' && motivo && motivo.titulo && motivo.descricao) {
-            try {
-                // ✅ VERIFICAÇÃO ADICIONAL: Checar se criadoPor existe
-                if (!evento.criadoPor) {
-                    console.warn('Evento não tem criador associado, pulando envio de email:', evento._id);
-                    return res.status(200).json(evento);
-                }
-
-                await enviarEmailRejeicaoEvento(evento.criadoPor, evento, motivo);
-                console.log('Email de rejeição enviado para:', evento.criadoPor.email);
-            } catch (emailError) {
-                console.error("Erro ao enviar email de rejeição:", emailError);
-                // Não falha a operação principal por erro de email
-            }
-        }
-
-        res.status(200).json(evento);
-    } catch (error) {
-        console.error('Erro detalhado:', error);
-        res.status(500).json({ message: 'Erro ao atualizar o status do evento', error: error.message });
+    if (!evento) {
+      return res.status(404).json({ message: 'Evento não encontrado.' });
     }
+
+    evento.status = status;
+    await evento.save();
+
+    // Se for rejeição e houver motivo, envia email
+    if (status === 'rejeitado' && motivo && motivo.titulo && motivo.descricao) {
+      try {
+        // ✅ VERIFICAÇÃO ADICIONAL: Checar se criadoPor existe
+        if (!evento.criadoPor) {
+          console.warn('Evento não tem criador associado, pulando envio de email:', evento._id);
+          return res.status(200).json(evento);
+        }
+
+        await enviarEmailRejeicaoEvento(evento.criadoPor, evento, motivo);
+        console.log('Email de rejeição enviado para:', evento.criadoPor.email);
+      } catch (emailError) {
+        console.error("Erro ao enviar email de rejeição:", emailError);
+        // Não falha a operação principal por erro de email
+      }
+    }
+
+    res.status(200).json(evento);
+  } catch (error) {
+    console.error('Erro detalhado:', error);
+    res.status(500).json({ message: 'Erro ao atualizar o status do evento', error: error.message });
+  }
 });
 
 
@@ -177,18 +177,18 @@ router.put('/:id/editar', authenticateToken, upload.single('imagem'), async (req
   try {
     const eventoId = req.params.id;
     const userId = req.user.userId; // Use userId do token
-    
+
     // Verificar se o evento existe e pertence ao usuário
     const eventoExistente = await Event.findById(eventoId);
-    
+
     if (!eventoExistente) {
       return res.status(404).json({ message: 'Evento não encontrado' });
     }
-    
+
     if (eventoExistente.criadoPor.toString() !== userId) {
       return res.status(403).json({ message: 'Acesso negado' });
     }
-    
+
     // Preparar campos para atualização
     const camposAtualizados = {
       nome: req.body.nome,
@@ -205,7 +205,7 @@ router.put('/:id/editar', authenticateToken, upload.single('imagem'), async (req
       dataInicio: req.body.dataInicio,
       horaInicio: req.body.horaInicio,
       horaTermino: req.body.horaTermino,
-      dataFim: req.body.dataFimVendas, // Corrigir mapeamento
+      dataFimVendas: req.body.dataFimVendas, // Corrigir mapeamento
       dataInicioVendas: req.body.dataInicioVendas,
       valorIngressoInteira: parseFloat(req.body.valorIngressoInteira),
       valorIngressoMeia: parseFloat(req.body.valorIngressoMeia),
@@ -216,18 +216,18 @@ router.put('/:id/editar', authenticateToken, upload.single('imagem'), async (req
       valorDoacao: parseFloat(req.body.valorDoacao),
       status: 'em_reanalise'
     };
-    
+
     // Se uma nova imagem foi enviada
     if (req.file) {
       camposAtualizados.imagem = req.file.filename;
     }
-    
+
     const eventoAtualizado = await Event.findByIdAndUpdate(
       eventoId,
       { $set: camposAtualizados },
       { new: true }
     );
-    
+
     res.json({
       message: 'Evento atualizado e enviado para reanálise',
       evento: eventoAtualizado
@@ -298,7 +298,7 @@ router.post('/criar', upload.single('imagem'), async (req, res) => {
       dataInicio,
       horaInicio,
       horaTermino,
-      dataFim: dataFimVendas,
+      dataFimVendas: dataFimVendas, // ← CORRIGIDO: use o mesmo nome do schema
       dataInicioVendas,
       valorIngressoInteira: valorIngressoInteira ? parseFloat(valorIngressoInteira.replace(',', '.')) : 0,
       valorIngressoMeia: valorIngressoMeia ? parseFloat(valorIngressoMeia.replace(',', '.')) : 0,
@@ -309,7 +309,6 @@ router.post('/criar', upload.single('imagem'), async (req, res) => {
       valorDoacao: querDoar === 'true' ? parseFloat(valorDoacao.replace(',', '.')) : 0,
       criadoPor
     });
-
     await novoEvento.save();
 
     try {
