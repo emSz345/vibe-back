@@ -4,7 +4,7 @@ const cors = require('cors');
 require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
-const eventBotRoutes = require('./routes/eventBotRoutes');
+const huggingfaceRoutes = require('./routes/huggingfaceRoutes'); 
 const jwt = require('jsonwebtoken');
 
 
@@ -62,7 +62,7 @@ if (!fs.existsSync(carrosselDir)) {
 const userRoutes = require('./routes/users');
 const eventRoutes = require('./routes/eventRoutes');
 const carrosselRoutes = require('./routes/carrosselRoutes');
-const witaiRoutes = require('./routes/witaiRoutes'); 
+
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -95,8 +95,8 @@ mongoose.connect(process.env.MONGO_URI, {
 app.use('/api/users', userRoutes);
 app.use('/api/eventos', eventRoutes);
 app.use('/api/carrossel', carrosselRoutes);
-app.use('/api/witai', witaiRoutes);
-app.use('/api/bot/eventos', eventBotRoutes);
+app.use('/api/huggingface', huggingfaceRoutes); 
+
 
 
 // Rota 404 - Adicione esta rota no final, antes da inicialização do servidor

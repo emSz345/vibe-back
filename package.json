@@ -11,6 +11,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@huggingface/inference": "^4.7.1",
     "aixo": "^0.1.2",
     "axios": "^1.11.0",
     "bcryptjs": "^3.0.2",

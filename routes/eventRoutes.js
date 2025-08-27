@@ -110,6 +110,21 @@ router.get('/listar/:status', async (req, res) => {
   }
 });
 
+
+// Rota pública para visualizar um evento (sem exigir token)
+router.get('/publico/:id', async (req, res) => {
+  try {
+    const evento = await Event.findById(req.params.id);
+    if (!evento || evento.status !== 'aprovado') {
+      return res.status(404).json({ message: 'Evento não encontrado!' });
+    }
+    res.status(200).json(evento);
+  } catch (error) {
+    res.status(500).json({ message: 'Erro ao buscar evento', error: error.message });
+  }
+});
+
+
 router.get('/:id', authenticateToken, async (req, res) => {
   try {
     const evento = await Event.findById(req.params.id);
