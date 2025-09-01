@@ -49,6 +49,36 @@ const getImagemPerfilPath = (filename) => {
   // Para imagens locais, retorna o caminho relativo
   return `/${UPLOAD_DIR}/${filename}`;
 };
+// --- ROTA PATH ---
+
+router.patch('/promover-admin', async (req, res) => {
+    const { email } = req.body;
+    
+    try {
+        // Encontre o usuário pelo e-mail
+        const user = await User.findOne({ email });
+
+        if (!user) {
+            return res.status(404).json({ message: 'Usuário não encontrado.' });
+        }
+
+        // Verifique se o usuário já é um administrador
+        if (user.isAdmin) {
+            return res.status(400).json({ message: 'Este usuário já é um administrador.' });
+        }
+
+        // Atualize o campo isAdmin para true
+        user.isAdmin = true;
+        await user.save(); // Salve a alteração no banco de dados
+
+        // Retorne uma resposta de sucesso
+        res.status(200).json({ message: 'Usuário promovido a administrador com sucesso.' });
+
+    } catch (error) {
+        console.error('Erro ao promover o usuário:', error);
+        res.status(500).json({ message: 'Erro interno do servidor.' });
+    }
+});
 
 // --- ROTA DE CADASTRO ---
 router.post('/register', upload.single('imagemPerfil'), async (req, res) => {

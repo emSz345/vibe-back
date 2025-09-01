@@ -226,7 +226,7 @@ router.put('/:id/editar', authenticateToken, upload.single('imagem'), async (req
       valorIngressoMeia: parseFloat(req.body.valorIngressoMeia),
       quantidadeInteira: parseInt(req.body.quantidadeInteira),
       quantidadeMeia: parseInt(req.body.quantidadeMeia),
-      temMeia: req.body.temMeia === 'true',
+      temMeia: req.body.temMeia,
       querDoar: req.body.querDoar === 'true',
       valorDoacao: parseFloat(req.body.valorDoacao),
       status: 'em_reanalise'
@@ -319,7 +319,7 @@ router.post('/criar', upload.single('imagem'), async (req, res) => {
       valorIngressoMeia: valorIngressoMeia ? parseFloat(valorIngressoMeia.replace(',', '.')) : 0,
       quantidadeInteira: quantidadeInteira ? parseInt(quantidadeInteira) : 0,
       quantidadeMeia: quantidadeMeia ? parseInt(quantidadeMeia) : 0,
-      temMeia: temMeia === 'true',
+      temMeia: temMeia,
       querDoar: querDoar === 'true',
       valorDoacao: querDoar === 'true' ? parseFloat(valorDoacao.replace(',', '.')) : 0,
       criadoPor

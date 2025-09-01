@@ -94,6 +94,7 @@ mongoose.connect(process.env.MONGO_URI, {
 // Conecte as rotas da sua API usando o prefixo '/api'
 app.use('/api/users', userRoutes);
 app.use('/api/eventos', eventRoutes);
+app.use('/api/auth', userRoutes); 
 app.use('/api/carrossel', carrosselRoutes);
 app.use('/api/huggingface', huggingfaceRoutes); 
 
