@@ -62,6 +62,7 @@ if (!fs.existsSync(carrosselDir)) {
 const userRoutes = require('./routes/users');
 const eventRoutes = require('./routes/eventRoutes');
 const carrosselRoutes = require('./routes/carrosselRoutes');
+const compraRoutes = require('./routes/comprasRoutes');
 
 
 const app = express();
@@ -97,7 +98,13 @@ app.use('/api/eventos', eventRoutes);
 app.use('/api/auth', userRoutes); 
 app.use('/api/carrossel', carrosselRoutes);
 app.use('/api/huggingface', huggingfaceRoutes); 
+app.use('/api/compras', compraRoutes);
 
+app.get('/api/eventos/verificar-estoque/:id', (req, res) => {
+  // Lógica para verificar o estoque do evento
+  // Utilize o req.params.id para obter o ID do evento
+  res.status(200).json({ estoqueDisponivel: true });
+});
 
 
 // Rota 404 - Adicione esta rota no final, antes da inicialização do servidor
