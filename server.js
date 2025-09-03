@@ -63,7 +63,7 @@ const userRoutes = require('./routes/users');
 const eventRoutes = require('./routes/eventRoutes');
 const carrosselRoutes = require('./routes/carrosselRoutes');
 const compraRoutes = require('./routes/comprasRoutes');
-
+const perfilRoutes = require('./routes/perfilRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -99,6 +99,7 @@ app.use('/api/auth', userRoutes);
 app.use('/api/carrossel', carrosselRoutes);
 app.use('/api/huggingface', huggingfaceRoutes); 
 app.use('/api/compras', compraRoutes);
+app.use('/api/perfil', perfilRoutes);
 
 app.get('/api/eventos/verificar-estoque/:id', (req, res) => {
   // Lógica para verificar o estoque do evento

@@ -35,25 +35,44 @@ const upload = multer({ storage });
 // --- FUNÇÃO AUXILIAR PARA OBTER O CAMINHO COMPLETO DA IMAGEM ---
 // Esta função é CRUCIAL. Ela monta o caminho completo para a imagem.
 const getImagemPerfilPath = (filename) => {
-  if (!filename) return `/uploads/${DEFAULT_AVATAR_FILENAME}`;
-  
-  // Se for uma URL completa (começa com http) - mantém como está
-  if (filename.startsWith('http')) {
-    return filename;
-  }
-  
-  if (filename === DEFAULT_AVATAR_FILENAME) {
-    return `/uploads/${DEFAULT_AVATAR_FILENAME}`;
-  }
-  
-  // Para imagens locais, retorna o caminho relativo
-  return `/${UPLOAD_DIR}/${filename}`;
-};
-// --- ROTA PATH ---
+    if (!filename) return `/uploads/${DEFAULT_AVATAR_FILENAME}`;
 
+    // Se for uma URL completa (começa com http) - mantém como está
+    if (filename.startsWith('http')) {
+        return filename;
+    }
+
+    if (filename === DEFAULT_AVATAR_FILENAME) {
+        return `/uploads/${DEFAULT_AVATAR_FILENAME}`;
+    }
+
+    // Para imagens locais, retorna o caminho relativo
+    return `/${UPLOAD_DIR}/${filename}`;
+};
+
+// --- ROTA GET POR ID ---
+// Esta é a rota que estava faltando e causa o erro 404
+router.get('/:userId', async (req, res) => {
+    try {
+        const user = await User.findById(req.params.userId);
+        if (!user) {
+            return res.status(404).json({ message: 'Usuário não encontrado.' });
+        }
+        res.status(200).json({
+            email: user.email,
+            imagemPerfil: getImagemPerfilPath(user.imagemPerfil),
+            nome: user.nome // Adicione outras propriedades que você precisa
+        });
+    } catch (error) {
+        console.error("Erro ao buscar usuário por ID:", error);
+        res.status(500).json({ message: 'Erro interno do servidor', error });
+    }
+});
+
+// --- ROTA PATH ---
 router.patch('/promover-admin', async (req, res) => {
     const { email } = req.body;
-    
+
     try {
         // Encontre o usuário pelo e-mail
         const user = await User.findOne({ email });
@@ -125,13 +144,13 @@ router.post('/register', upload.single('imagemPerfil'), async (req, res) => {
             const verificationLink = `${process.env.BASE_URL}/api/users/verify/${verificationToken}`;
 
             const emailHtml = `
-            <div style="font-family: Arial, sans-serif; text-align: center; color: #333;">
-                <h1 style="color: #007bff;">Bem-vindo(a) ao NaVibe Eventos, ${user.nome}!</h1>
-                <p>Seu cadastro foi iniciado. Por favor, clique no botão abaixo para verificar seu endereço de e-mail e ativar sua conta.</p>
-                <a href="${verificationLink}" style="background-color: #28a745; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; margin-top: 20px; display: inline-block;">Verificar meu E-mail</a>
-                <p style="margin-top: 20px;">Se você não se cadastrou, por favor, ignore este e-mail.</p>
-            </div>
-        `;
+            <div style="font-family: Arial, sans-serif; text-align: center; color: #333;">
+                <h1 style="color: #007bff;">Bem-vindo(a) ao NaVibe Eventos, ${user.nome}!</h1>
+                <p>Seu cadastro foi iniciado. Por favor, clique no botão abaixo para verificar seu endereço de e-mail e ativar sua conta.</p>
+                <a href="${verificationLink}" style="background-color: #28a745; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; margin-top: 20px; display: inline-block;">Verificar meu E-mail</a>
+                <p style="margin-top: 20px;">Se você não se cadastrou, por favor, ignore este e-mail.</p>
+            </div>
+        `;
 
             await enviarEmail({
                 to: user.email,
@@ -183,15 +202,15 @@ router.post('/forgot-password', async (req, res) => {
         const resetLink = `${process.env.FRONTEND_URL}/reset-password/${resetToken}`;
 
         const emailHtml = `
-            <div style="font-family: Arial, sans-serif; text-align: center; color: #333;">
-                <h1 style="color: #007bff;">Redefinição de Senha</h1>
-                <p>Você solicitou a redefinição de senha para sua conta na NaVibe Eventos.</p>
-                <p>Clique no botão abaixo para redefinir sua senha:</p>
-                <a href="${resetLink}" style="background-color: #28a745; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; margin-top: 20px; display: inline-block;">Redefinir Senha</a>
-                <p style="margin-top: 20px;">Se você não solicitou esta redefinição, por favor, ignore este e-mail.</p>
-                <p>Este link expirará em 1 hora.</p>
-            </div>
-        `;
+            <div style="font-family: Arial, sans-serif; text-align: center; color: #333;">
+                <h1 style="color: #007bff;">Redefinição de Senha</h1>
+                <p>Você solicitou a redefinição de senha para sua conta na NaVibe Eventos.</p>
+                <p>Clique no botão abaixo para redefinir sua senha:</p>
+                <a href="${resetLink}" style="background-color: #28a745; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; margin-top: 20px; display: inline-block;">Redefinir Senha</a>
+                <p style="margin-top: 20px;">Se você não solicitou esta redefinição, por favor, ignore este e-mail.</p>
+                <p>Este link expirará em 1 hora.</p>
+            </div>
+        `;
 
         await enviarEmail({
             to: user.email,
@@ -262,12 +281,12 @@ router.get('/verify/:token', async (req, res) => {
         await user.save();
 
         res.status(200).send(`
-            <div style="font-family: Arial, sans-serif; text-align: center; padding: 50px;">
-                <h1 style="color: #28a745;">E-mail Verificado com Sucesso!</h1>
-                <p>Obrigado, ${user.nome}. Sua conta foi ativada.</p>
-                <p>Você já pode fechar esta página e fazer login na plataforma.</p>
-            </div>
-        `);
+            <div style="font-family: Arial, sans-serif; text-align: center; padding: 50px;">
+                <h1 style="color: #28a745;">E-mail Verificado com Sucesso!</h1>
+                <p>Obrigado, ${user.nome}. Sua conta foi ativada.</p>
+                <p>Você já pode fechar esta página e fazer login na plataforma.</p>
+            </div>
+        `);
 
     } catch (err) {
         console.error("Erro na verificação de e-mail:", err);
@@ -366,14 +385,14 @@ router.put('/updateByEmail/:email', upload.single('imagemPerfil'), async (req, r
         if (!user) return res.status(444).json({ message: 'Usuário não encontrado' });
 
         if (req.file && userBeforeUpdate && userBeforeUpdate.imagemPerfil) {
-             if (!userBeforeUpdate.imagemPerfil.startsWith('http') && userBeforeUpdate.imagemPerfil !== DEFAULT_AVATAR_FILENAME) {
-            const oldImagePath = path.join(__dirname, '..', UPLOAD_DIR, userBeforeUpdate.imagemPerfil);
-            fs.unlink(oldImagePath, (err) => {
-                if (err) console.error("Erro ao deletar imagem antiga:", oldImagePath, err);
-                else console.log("Imagem antiga deletada:", oldImagePath);
-            });
+            if (!userBeforeUpdate.imagemPerfil.startsWith('http') && userBeforeUpdate.imagemPerfil !== DEFAULT_AVATAR_FILENAME) {
+                const oldImagePath = path.join(__dirname, '..', UPLOAD_DIR, userBeforeUpdate.imagemPerfil);
+                fs.unlink(oldImagePath, (err) => {
+                    if (err) console.error("Erro ao deletar imagem antiga:", oldImagePath, err);
+                    else console.log("Imagem antiga deletada:", oldImagePath);
+                });
+            }
         }
-    }
 
         res.status(200).json({
             message: 'Usuário atualizado com sucesso',
@@ -384,7 +403,7 @@ router.put('/updateByEmail/:email', upload.single('imagemPerfil'), async (req, r
                 provedor: user.provedor,
                 isVerified: user.isVerified,
                 imagemPerfil: getImagemPerfilPath(user.imagemPerfil),
-                isAdmin: user.isAdmin  // Retorna o caminho completo
+                isAdmin: user.isAdmin  // Retorna o caminho completo
             }
         });
     } catch (err) {
@@ -484,6 +503,5 @@ router.post('/social-login', async (req, res) => {
         });
     }
 });
-
 
 module.exports = router;
