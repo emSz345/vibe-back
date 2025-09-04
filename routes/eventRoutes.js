@@ -113,8 +113,8 @@ router.get('/listar/:status', async (req, res) => {
 
 // Rota pública para visualizar um evento (sem exigir token)
 router.get('/publico/:id', async (req, res) => {
-  try {
-    const evento = await Event.findById(req.params.id);
+   try {
+    const evento = await Event.findById(req.params.id).populate('criadoPor', 'nome email imagemPerfil');
     if (!evento || evento.status !== 'aprovado') {
       return res.status(404).json({ message: 'Evento não encontrado!' });
     }
@@ -126,8 +126,8 @@ router.get('/publico/:id', async (req, res) => {
 
 
 router.get('/:id', authenticateToken, async (req, res) => {
-  try {
-    const evento = await Event.findById(req.params.id);
+   try {
+    const evento = await Event.findById(req.params.id).populate('criadoPor', 'nome email imagemPerfil');
     if (!evento) {
       return res.status(404).json({ message: 'Evento não encontrado.' });
     }
