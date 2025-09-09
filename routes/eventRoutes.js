@@ -4,36 +4,12 @@ const Event = require('../models/Event');
 const User = require('../models/User');
 const multer = require('multer');
 const path = require('path');
-const jwt = require('jsonwebtoken');
 const { enviarEmailConfirmacaoEvento, enviarEmailRejeicaoEvento } = require('../utils/emailService');
 
+// IMPORTA O MIDDLEWARE CORRETO QUE LÊ COOKIES
+const authMiddleware = require('../authMiddleware');
 
-
-const authenticateToken = (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-
-  if (!token) {
-    return res.status(401).json({ message: 'Token de acesso necessário' });
-  }
-
-  jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
-    if (err) {
-      return res.status(403).json({ message: 'Token inválido' });
-    }
-
-    if (!decoded.userId && !decoded.id) {
-      return res.status(403).json({ message: 'Estrutura do token inválida' });
-    }
-
-    // CORREÇÃO TEMPORÁRIA: Use decoded.id se userId não existir
-    req.user = {
-      userId: decoded.userId
-    };
-
-    next();
-  });
-};
+// A FUNÇÃO 'authenticateToken' FOI REMOVIDA.
 
 // Configuração do multer para salvar arquivos na pasta 'uploads'
 const uploadPath = path.join(__dirname, '..', 'uploads');
@@ -44,7 +20,6 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 
 // Rota para listar eventos com status 'aprovado'
-// Esta rota corresponde à chamada do seu frontend: /api/eventos/aprovados
 router.get('/aprovados', async (req, res) => {
   try {
     const eventos = await Event.find({ status: 'aprovado' });
@@ -54,16 +29,13 @@ router.get('/aprovados', async (req, res) => {
   }
 });
 
-
-router.get('/meus-eventos', authenticateToken, async (req, res) => {
+// Rota para o usuário ver os próprios eventos
+router.get('/meus-eventos', authMiddleware, async (req, res) => {
   try {
-    // O userId agora vem do token JWT decodificado
-    const userId = req.user.userId;
-
+    const userId = req.userId; // ID do usuário vindo do cookie/token
     if (!userId) {
       return res.status(400).json({ message: 'ID do usuário não encontrado no token' });
     }
-
     const eventos = await Event.find({ criadoPor: userId });
     res.status(200).json(eventos);
   } catch (error) {
@@ -72,18 +44,17 @@ router.get('/meus-eventos', authenticateToken, async (req, res) => {
   }
 });
 
-router.delete('/:id', authenticateToken, async (req, res) => {
+// Rota para deletar um evento
+router.delete('/:id', authMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
-    const userId = req.user.userId;
+    const userId = req.userId; // ID do usuário vindo do cookie/token
 
-    // Verifique se o evento existe
     const evento = await Event.findById(id);
     if (!evento) {
       return res.status(404).json({ message: 'Evento não encontrado' });
     }
 
-    // Verifique se o usuário é o dono do evento
     if (evento.criadoPor.toString() !== userId) {
       return res.status(403).json({ message: 'Acesso negado - você não é o dono deste evento' });
     }
@@ -96,21 +67,18 @@ router.delete('/:id', authenticateToken, async (req, res) => {
   }
 });
 
-// eventRoutes.js - Adicione esta rota
 router.get('/aprovados-carrossel', async (req, res) => {
   try {
-    const eventosAprovados = await Event.find({ 
-      status: 'aprovado' 
+    const eventosAprovados = await Event.find({
+      status: 'aprovado'
     }).populate('criadoPor', 'nome imagemPerfil');
-    
+
     res.status(200).json(eventosAprovados);
   } catch (error) {
     res.status(500).json({ message: 'Erro ao buscar eventos aprovados', error: error.message });
   }
 });
 
-
-// Rota para listar eventos por status (mantida para flexibilidade)
 router.get('/listar/:status', async (req, res) => {
   try {
     const statusDesejado = req.params.status;
@@ -127,7 +95,7 @@ router.get('/doadores/pendentes', async (req, res) => {
       'doadores.aprovadoParaCarrossel': false,
       'doadores.0': { $exists: true }
     }).populate('doadores.usuarioId', 'nome imagemPerfil');
-    
+
     const doadoresPendentes = [];
     eventosComDoadores.forEach(evento => {
       evento.doadores.forEach(doador => {
@@ -144,38 +112,35 @@ router.get('/doadores/pendentes', async (req, res) => {
         }
       });
     });
-    
+
     res.status(200).json(doadoresPendentes);
   } catch (error) {
     res.status(500).json({ message: 'Erro ao buscar doadores', error: error.message });
   }
 });
 
-// eventRoutes.js - Adicione esta rota
 router.patch('/doadores/:doadorId/aprovar', async (req, res) => {
   try {
     const { doadorId } = req.params;
     const { aprovado } = req.body;
-    
+
     const evento = await Event.findOne({ 'doadores._id': doadorId });
-    
+
     if (!evento) {
       return res.status(404).json({ message: 'Doador não encontrado' });
     }
-    
+
     const doador = evento.doadores.id(doadorId);
     doador.aprovadoParaCarrossel = aprovado;
-    
+
     await evento.save();
-    
+
     res.status(200).json({ message: `Doador ${aprovado ? 'aprovado' : 'rejeitado'} com sucesso` });
   } catch (error) {
     res.status(500).json({ message: 'Erro ao processar doador', error: error.message });
   }
 });
 
-
-// Rota pública para visualizar um evento (sem exigir token)
 router.get('/publico/:id', async (req, res) => {
   try {
     const evento = await Event.findById(req.params.id).populate('criadoPor', 'nome email imagemPerfil');
@@ -188,17 +153,15 @@ router.get('/publico/:id', async (req, res) => {
   }
 });
 
-
-router.get('/:id', authenticateToken, async (req, res) => {
+router.get('/:id', authMiddleware, async (req, res) => {
   try {
     const evento = await Event.findById(req.params.id).populate('criadoPor', 'nome email imagemPerfil');
     if (!evento) {
       return res.status(404).json({ message: 'Evento não encontrado.' });
     }
 
-    // Verificar se o usuário é o dono do evento
-    const userId = req.user.userId;
-    if (evento.criadoPor.toString() !== userId) {
+    const userId = req.userId; // ID do usuário vindo do cookie/token
+    if (evento.criadoPor._id.toString() !== userId) {
       return res.status(403).json({ message: 'Acesso negado - você não é o dono deste evento' });
     }
 
@@ -208,16 +171,12 @@ router.get('/:id', authenticateToken, async (req, res) => {
   }
 });
 
-// Rota para atualização de status do evento
 router.patch('/atualizar-status/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const { status, motivo } = req.body;
 
-    console.log('Recebido:', { id, status, motivo });
-
     const evento = await Event.findById(id).populate('criadoPor');
-
     if (!evento) {
       return res.status(404).json({ message: 'Evento não encontrado.' });
     }
@@ -225,23 +184,15 @@ router.patch('/atualizar-status/:id', async (req, res) => {
     evento.status = status;
     await evento.save();
 
-    // Se for rejeição e houver motivo, envia email
     if (status === 'rejeitado' && motivo && motivo.titulo && motivo.descricao) {
-      try {
-        // ✅ VERIFICAÇÃO ADICIONAL: Checar se criadoPor existe
-        if (!evento.criadoPor) {
-          console.warn('Evento não tem criador associado, pulando envio de email:', evento._id);
-          return res.status(200).json(evento);
-        }
-
-        await enviarEmailRejeicaoEvento(evento.criadoPor, evento, motivo);
-        console.log('Email de rejeição enviado para:', evento.criadoPor.email);
-      } catch (emailError) {
-        console.error("Erro ao enviar email de rejeição:", emailError);
-        // Não falha a operação principal por erro de email
+      if (!evento.criadoPor) {
+        console.warn('Evento não tem criador associado, pulando envio de email:', evento._id);
+        return res.status(200).json(evento);
       }
+      await enviarEmailRejeicaoEvento(evento.criadoPor, evento, motivo).catch(emailError => {
+        console.error("Erro ao enviar email de rejeição:", emailError);
+      });
     }
-
     res.status(200).json(evento);
   } catch (error) {
     console.error('Erro detalhado:', error);
@@ -249,26 +200,19 @@ router.patch('/atualizar-status/:id', async (req, res) => {
   }
 });
 
-
-// No arquivo de rotas de eventos (eventos.js)
-// Substitua as duas rotas /editar por esta única rota correta:
-router.put('/:id/editar', authenticateToken, upload.single('imagem'), async (req, res) => {
+router.put('/:id/editar', authMiddleware, upload.single('imagem'), async (req, res) => {
   try {
     const eventoId = req.params.id;
-    const userId = req.user.userId; // Use userId do token
+    const userId = req.userId; // ID do usuário vindo do cookie/token
 
-    // Verificar se o evento existe e pertence ao usuário
     const eventoExistente = await Event.findById(eventoId);
-
     if (!eventoExistente) {
       return res.status(404).json({ message: 'Evento não encontrado' });
     }
-
     if (eventoExistente.criadoPor.toString() !== userId) {
       return res.status(403).json({ message: 'Acesso negado' });
     }
 
-    // Preparar campos para atualização
     const camposAtualizados = {
       nome: req.body.nome,
       categoria: req.body.categoria,
@@ -284,7 +228,7 @@ router.put('/:id/editar', authenticateToken, upload.single('imagem'), async (req
       dataInicio: req.body.dataInicio,
       horaInicio: req.body.horaInicio,
       horaTermino: req.body.horaTermino,
-      dataFimVendas: req.body.dataFimVendas, // Corrigir mapeamento
+      dataFimVendas: req.body.dataFimVendas,
       dataInicioVendas: req.body.dataInicioVendas,
       valorIngressoInteira: parseFloat(req.body.valorIngressoInteira),
       valorIngressoMeia: parseFloat(req.body.valorIngressoMeia),
@@ -296,7 +240,6 @@ router.put('/:id/editar', authenticateToken, upload.single('imagem'), async (req
       status: 'em_reanalise'
     };
 
-    // Se uma nova imagem foi enviada
     if (req.file) {
       camposAtualizados.imagem = req.file.filename;
     }
@@ -307,55 +250,26 @@ router.put('/:id/editar', authenticateToken, upload.single('imagem'), async (req
       { new: true }
     );
 
-    res.json({
-      message: 'Evento atualizado e enviado para reanálise',
-      evento: eventoAtualizado
-    });
+    res.json({ message: 'Evento atualizado e enviado para reanálise', evento: eventoAtualizado });
   } catch (error) {
     console.error('Erro ao atualizar evento:', error);
     res.status(500).json({ message: 'Erro ao editar evento', error: error.message });
   }
 });
 
-
-// Rota para criação de evento com imagem
-router.post('/criar', upload.single('imagem'), async (req, res) => {
+router.post('/criar', authMiddleware, upload.single('imagem'), async (req, res) => {
   try {
-    const {
-      nome,
-      categoria,
-      descricao,
-      cep,
-      rua,
-      bairro,
-      numero,
-      complemento,
-      cidade,
-      estado,
-      linkMaps,
-      dataInicio,
-      horaInicio,
-      horaTermino,
-      dataFimVendas,
-      dataInicioVendas,
-      valorIngressoInteira,
-      valorIngressoMeia,
-      quantidadeInteira,
-      quantidadeMeia,
-      temMeia,
-      querDoar,
-      valorDoacao,
-      criadoPor
-    } = req.body;
+    const criadoPor = req.userId; // ID do usuário vindo do cookie/token, mais seguro!
 
-    
+    const {
+      nome, categoria, descricao, cep, rua, bairro, numero, complemento, cidade,
+      estado, linkMaps, dataInicio, horaInicio, horaTermino, dataFimVendas,
+      dataInicioVendas, valorIngressoInteira, valorIngressoMeia,
+      quantidadeInteira, quantidadeMeia, temMeia, querDoar, valorDoacao,
+    } = req.body;
 
     if (!req.file) {
       return res.status(400).json({ message: 'A imagem do evento é obrigatória.' });
-    }
-
-    if (!criadoPor || criadoPor === 'null') {
-      return res.status(400).json({ message: 'O ID do criador do evento é obrigatório. Faça o login para continuar.' });
     }
 
     const usuario = await User.findById(criadoPor);
@@ -379,7 +293,7 @@ router.post('/criar', upload.single('imagem'), async (req, res) => {
       dataInicio,
       horaInicio,
       horaTermino,
-      dataFimVendas: dataFimVendas, // ← CORRIGIDO: use o mesmo nome do schema
+      dataFimVendas: dataFimVendas,
       dataInicioVendas,
       valorIngressoInteira: valorIngressoInteira ? parseFloat(valorIngressoInteira.replace(',', '.')) : 0,
       valorIngressoMeia: valorIngressoMeia ? parseFloat(valorIngressoMeia.replace(',', '.')) : 0,
@@ -391,9 +305,7 @@ router.post('/criar', upload.single('imagem'), async (req, res) => {
       criadoPor
     });
 
-
-     if (querDoar === 'true' && parseFloat(valorDoacao.replace(',', '.')) > 0) {
-      const usuario = await User.findById(criadoPor);
+    if (querDoar === 'true' && parseFloat(valorDoacao.replace(',', '.')) > 0) {
       novoEvento.doadores.push({
         usuarioId: criadoPor,
         imagemPerfil: usuario.imagemPerfil,
@@ -404,18 +316,11 @@ router.post('/criar', upload.single('imagem'), async (req, res) => {
 
     await novoEvento.save();
 
-   
-
-    try {
-      await enviarEmailConfirmacaoEvento(usuario, novoEvento);
-    } catch (emailError) {
+    await enviarEmailConfirmacaoEvento(usuario, novoEvento).catch(emailError => {
       console.error("Falha ao enviar e-mail de confirmação de evento, mas o evento foi criado.", emailError);
-    }
-
-    res.status(201).json({
-      message: 'Evento criado com sucesso!',
-      evento: novoEvento
     });
+
+    res.status(201).json({ message: 'Evento criado com sucesso!', evento: novoEvento });
   } catch (error) {
     if (error.name === 'CastError') {
       return res.status(400).json({ message: `O ID '${error.value}' fornecido para o criador do evento não é válido.`, error: error.message });

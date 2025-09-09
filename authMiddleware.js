@@ -1,24 +1,24 @@
 const jwt = require('jsonwebtoken');
-const User = require('./models/User'); // Ajuste o caminho para seu modelo User
 const SECRET = process.env.JWT_SECRET;
 
-const authMiddleware = async (req, res, next) => {
-  // 1. Pega o token do cookie que o navegador enviou
+const authMiddleware = (req, res, next) => {
+  // 1. Tenta obter o token do cookie chamado 'authToken'
   const token = req.cookies.authToken;
 
+  // 2. Se não houver token, retorna erro de não autorizado
   if (!token) {
     return res.status(401).json({ message: 'Acesso negado. Nenhum token fornecido.' });
   }
 
   try {
-    // 2. Verifica se o token é válido
+    // 3. Verifica se o token é válido
     const decoded = jwt.verify(token, SECRET);
 
-    // 3. Adiciona o ID do usuário ao objeto 'req' para que as próximas rotas possam usá-lo
+    // 4. Adiciona o ID do usuário ao objeto 'req' para uso nas rotas protegidas
     req.userId = decoded.userId;
-
-    next(); // 4. Passa para a próxima função (a rota principal)
+    next(); // Continua para a próxima função (a rota)
   } catch (error) {
+    // 5. Se o token for inválido (expirado, etc.), retorna erro
     res.status(401).json({ message: 'Token inválido.' });
   }
 };
