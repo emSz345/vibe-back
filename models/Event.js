@@ -36,7 +36,15 @@ const eventSchema = new mongoose.Schema({
   type: String, 
    enum: ["em_analise", "aprovado", "rejeitado", "em_reanalise"],
   default: "em_analise" 
-}
+},
+doadores: [{
+  usuarioId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  imagemPerfil: { type: String },
+  nome: { type: String },
+  valorDoacao: { type: Number },
+  dataDoacao: { type: Date, default: Date.now },
+  aprovadoParaCarrossel: { type: Boolean, default: false }
+}]
 }, { timestamps: true });
 
 

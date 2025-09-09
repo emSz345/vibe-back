@@ -96,7 +96,18 @@ router.delete('/:id', authenticateToken, async (req, res) => {
   }
 });
 
-
+// eventRoutes.js - Adicione esta rota
+router.get('/aprovados-carrossel', async (req, res) => {
+  try {
+    const eventosAprovados = await Event.find({ 
+      status: 'aprovado' 
+    }).populate('criadoPor', 'nome imagemPerfil');
+    
+    res.status(200).json(eventosAprovados);
+  } catch (error) {
+    res.status(500).json({ message: 'Erro ao buscar eventos aprovados', error: error.message });
+  }
+});
 
 
 // Rota para listar eventos por status (mantida para flexibilidade)
@@ -110,10 +121,63 @@ router.get('/listar/:status', async (req, res) => {
   }
 });
 
+router.get('/doadores/pendentes', async (req, res) => {
+  try {
+    const eventosComDoadores = await Event.find({
+      'doadores.aprovadoParaCarrossel': false,
+      'doadores.0': { $exists: true }
+    }).populate('doadores.usuarioId', 'nome imagemPerfil');
+    
+    const doadoresPendentes = [];
+    eventosComDoadores.forEach(evento => {
+      evento.doadores.forEach(doador => {
+        if (!doador.aprovadoParaCarrossel) {
+          doadoresPendentes.push({
+            _id: doador._id,
+            eventoId: evento._id,
+            nome: doador.nome,
+            imagemPerfil: doador.imagemPerfil,
+            valorDoacao: doador.valorDoacao,
+            dataDoacao: doador.dataDoacao,
+            nomeEvento: evento.nome
+          });
+        }
+      });
+    });
+    
+    res.status(200).json(doadoresPendentes);
+  } catch (error) {
+    res.status(500).json({ message: 'Erro ao buscar doadores', error: error.message });
+  }
+});
+
+// eventRoutes.js - Adicione esta rota
+router.patch('/doadores/:doadorId/aprovar', async (req, res) => {
+  try {
+    const { doadorId } = req.params;
+    const { aprovado } = req.body;
+    
+    const evento = await Event.findOne({ 'doadores._id': doadorId });
+    
+    if (!evento) {
+      return res.status(404).json({ message: 'Doador não encontrado' });
+    }
+    
+    const doador = evento.doadores.id(doadorId);
+    doador.aprovadoParaCarrossel = aprovado;
+    
+    await evento.save();
+    
+    res.status(200).json({ message: `Doador ${aprovado ? 'aprovado' : 'rejeitado'} com sucesso` });
+  } catch (error) {
+    res.status(500).json({ message: 'Erro ao processar doador', error: error.message });
+  }
+});
+
 
 // Rota pública para visualizar um evento (sem exigir token)
 router.get('/publico/:id', async (req, res) => {
-   try {
+  try {
     const evento = await Event.findById(req.params.id).populate('criadoPor', 'nome email imagemPerfil');
     if (!evento || evento.status !== 'aprovado') {
       return res.status(404).json({ message: 'Evento não encontrado!' });
@@ -126,7 +190,7 @@ router.get('/publico/:id', async (req, res) => {
 
 
 router.get('/:id', authenticateToken, async (req, res) => {
-   try {
+  try {
     const evento = await Event.findById(req.params.id).populate('criadoPor', 'nome email imagemPerfil');
     if (!evento) {
       return res.status(404).json({ message: 'Evento não encontrado.' });
@@ -284,6 +348,8 @@ router.post('/criar', upload.single('imagem'), async (req, res) => {
       criadoPor
     } = req.body;
 
+    
+
     if (!req.file) {
       return res.status(400).json({ message: 'A imagem do evento é obrigatória.' });
     }
@@ -324,7 +390,21 @@ router.post('/criar', upload.single('imagem'), async (req, res) => {
       valorDoacao: querDoar === 'true' ? parseFloat(valorDoacao.replace(',', '.')) : 0,
       criadoPor
     });
+
+
+     if (querDoar === 'true' && parseFloat(valorDoacao.replace(',', '.')) > 0) {
+      const usuario = await User.findById(criadoPor);
+      novoEvento.doadores.push({
+        usuarioId: criadoPor,
+        imagemPerfil: usuario.imagemPerfil,
+        nome: usuario.nome,
+        valorDoacao: parseFloat(valorDoacao.replace(',', '.'))
+      });
+    }
+
     await novoEvento.save();
+
+   
 
     try {
       await enviarEmailConfirmacaoEvento(usuario, novoEvento);

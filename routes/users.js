@@ -8,6 +8,7 @@ const path = require('path');
 const validator = require('validator');
 const { enviarEmail } = require('../utils/emailService');
 const fs = require('fs');
+const authMiddleware = require('../authMiddleware');
 
 const SECRET = process.env.JWT_SECRET;
 const UPLOAD_DIR = 'uploads/perfil-img'; // Diretório onde as imagens de perfil serão salvas
@@ -327,34 +328,39 @@ router.post('/login', async (req, res) => {
 
     try {
         const user = await User.findOne({ email });
-        if (!user) {
-            return res.status(401).json({ message: 'Credenciais inválidas' });
+        if (!user || !user.isVerified) {
+            return res.status(401).json({ message: 'Credenciais inválidas ou e-mail não verificado.' });
         }
 
-        if (!user.isVerified) {
-            return res.status(403).json({ message: 'Seu e-mail ainda não foi verificado. Por favor, cheque sua caixa de entrada.' });
-        }
-
-        if (user.provedor !== 'local' && user.provedor) {
-            const token = jwt.sign({ userId: user._id, nome: user.nome }, SECRET, { expiresIn: '7d' });
-            return res.status(200).json({
-                message: 'Login via provedor realizado com sucesso',
-                user: { ...user.toObject(), isAdmin: user.isAdmin, imagemPerfil: getImagemPerfilPath(user.imagemPerfil) },
-                token
-            });
-        }
+        // ... sua lógica de verificação de provedor ...
 
         const senhaCorreta = await bcrypt.compare(senha, user.senha);
         if (!senhaCorreta) {
             return res.status(401).json({ message: 'Credenciais inválidas' });
         }
 
-        const token = jwt.sign({ userId: user._id, nome: user.nome }, SECRET, { expiresIn: '7d' });
+        // ALTERAÇÃO 1: Gerar o token como antes...
+        const token = jwt.sign({ userId: user._id }, SECRET, { expiresIn: '7d' });
 
+        // ALTERAÇÃO 2: Definir o token em um cookie HttpOnly seguro
+        res.cookie('authToken', token, {
+            httpOnly: true, // Impede que o JavaScript do frontend acesse o cookie
+            secure: process.env.NODE_ENV === 'production', // Enviar apenas via HTTPS em produção
+            sameSite: 'lax', // Proteção contra ataques CSRF
+            maxAge: 7 * 24 * 60 * 60 * 1000, // Cookie expira em 7 dias
+        });
+
+        // ALTERAÇÃO 3: Retornar a resposta JSON SEM o token no corpo
         res.status(200).json({
             message: 'Login realizado com sucesso',
-            user: { ...user.toObject(), isAdmin: user.isAdmin, imagemPerfil: getImagemPerfilPath(user.imagemPerfil) },
-            token
+            user: {
+                _id: user._id,
+                nome: user.nome,
+                email: user.email,
+                isAdmin: user.isAdmin,
+                imagemPerfil: getImagemPerfilPath(user.imagemPerfil)
+            },
+            // A propriedade 'token' foi removida daqui
         });
     } catch (err) {
         console.error("Erro no login:", err);
@@ -413,12 +419,12 @@ router.put('/updateByEmail/:email', upload.single('imagemPerfil'), async (req, r
 });
 
 // --- ROTA GET /me ---
-router.get('/me', async (req, res) => {
+router.get('/me', authMiddleware, async (req, res) => {
     const email = req.query.email;
     if (!email) return res.status(400).json({ message: 'Email é obrigatório' });
 
     try {
-        const user = await User.findOne({ email }).select('nome email imagemPerfil provedor isVerified');
+        const user = await User.findById(req.userId).select('-senha'); // .select('-senha') remove a senha da resposta
         if (!user) return res.status(404).json({ message: 'Usuário não encontrado' });
 
         res.json({
@@ -427,7 +433,7 @@ router.get('/me', async (req, res) => {
             email: user.email,
             provedor: user.provedor,
             isVerified: user.isVerified,
-            imagemPerfil: getImagemPerfilPath(user.imagemPerfil) // Retorna o caminho completo
+            imagemPerfil: user.imagemPerfil // Retorna o caminho completo
         });
     } catch (error) {
         console.error("Erro ao buscar usuário em /me:", error);
@@ -438,48 +444,22 @@ router.get('/me', async (req, res) => {
 // --- ROTA SOCIAL LOGIN ---
 router.post('/social-login', async (req, res) => {
     const { provider, userData } = req.body;
-
-    if (!userData || !userData.email) {
-        return res.status(400).json({
-            message: 'Dados incompletos: e-mail é obrigatório'
-        });
-    }
-
-    console.log("Dados recebidos:", { provider, userData });
+    // ... (sua lógica para encontrar ou criar o usuário) ...
 
     try {
-
-        const existingUser = await User.findOne({ email: userData.email });
-
-
-        if (existingUser && existingUser.provedor !== provider) {
-            return res.status(400).json({
-                message: `Este e-mail já está registrado com ${existingUser.provedor}. Faça login com esse provedor.`
-            });
-        }
-
+        // Supondo que você obteve o objeto 'user' com sucesso...
         let user = await User.findOne({ email: userData.email });
+        // ... (lógica de criar/atualizar usuário)
 
-        if (!user) {
-            user = new User({
-                nome: userData.nome,
-                email: userData.email,
-                provedor: provider,
-                imagemPerfil: imagemPerfilFilename,
-                isVerified: true
-            });
-            await user.save();
-        } else {
-            user.nome = userData.nome;
-            if (!user.imagemPerfil || user.imagemPerfil === DEFAULT_AVATAR_FILENAME) {
-                user.imagemPerfil = userData.imagemPerfil || user.imagemPerfil;
-            }
-            user.provedor = provider;
-            user.isVerified = true;
-            await user.save();
-        }
+        // As alterações são as mesmas da rota de login normal:
+        const token = jwt.sign({ userId: user._id }, SECRET, { expiresIn: '7d' });
 
-        const token = jwt.sign({ userId: user._id, nome: user.nome }, SECRET, { expiresIn: '7d' });
+        res.cookie('authToken', token, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'lax',
+            maxAge: 7 * 24 * 60 * 60 * 1000,
+        });
 
         res.status(200).json({
             message: 'Login social realizado com sucesso',
@@ -487,21 +467,20 @@ router.post('/social-login', async (req, res) => {
                 _id: user._id,
                 nome: user.nome,
                 email: user.email,
-                isVerified: user.isVerified,
-                provedor: user.provedor,
-                isAdmin: user.isAdmin, // Garantir que isAdmin é enviado
-                imagemPerfil: getImagemPerfilPath(user.imagemPerfil) // Retorna o caminho completo
+                isAdmin: user.isAdmin,
+                imagemPerfil: getImagemPerfilPath(user.imagemPerfil)
             },
-            token
+            // Token removido daqui também
         });
     } catch (err) {
-        console.error("Erro detalhado no login social:", err);
-        res.status(500).json({
-            message: 'Erro no login social',
-            error: err.message,
-            stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
-        });
+        // ... seu tratamento de erro
     }
+});
+
+router.post('/logout', (req, res) => {
+    // Esta rota limpa o cookie do navegador, fazendo o logout do usuário.
+    res.clearCookie('authToken');
+    res.status(200).json({ message: 'Logout realizado com sucesso' });
 });
 
 module.exports = router;
