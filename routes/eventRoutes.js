@@ -20,9 +20,25 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 
 // Rota para listar eventos com status 'aprovado'
+router.get('/estados', async (req, res) => {
+  try {
+    // O método distinct() do Mongoose retorna um array com todos os valores únicos para o campo 'estado'.
+    const estados = await Event.distinct('estado', { status: 'aprovado' });
+    res.status(200).json(estados);
+  } catch (error) {
+    console.error("Erro ao buscar lista de estados:", error);
+    res.status(500).json({ message: 'Erro ao buscar lista de estados.' });
+  }
+});
+
+// 2. ROTA '/aprovados' MODIFICADA para aceitar um filtro de estado
 router.get('/aprovados', async (req, res) => {
   try {
-    const eventos = await Event.find({ status: 'aprovado' });
+    const query = { status: 'aprovado' };
+    if (req.query.estado) {
+      query.estado = req.query.estado;
+    }
+    const eventos = await Event.find(query);
     res.status(200).json(eventos);
   } catch (error) {
     res.status(500).json({ message: 'Erro ao buscar eventos aprovados', error: error.message });
