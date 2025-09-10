@@ -68,9 +68,10 @@ const perfilRoutes = require('./routes/perfilRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+const front = process.env.FRONTEND_URL;
 
 app.use(cors({
-  origin: 'http://localhost:3000', // URL EXATA do seu frontend
+  origin: front, // URL EXATA do seu frontend
   credentials: true                // ESSENCIAL para cookies funcionar
 }));
 
@@ -116,3 +117,4 @@ app.use((req, res, next) => {
 app.listen(PORT, () => {
     console.log(`Servidor rodando na porta ${PORT}`);
 });
+
