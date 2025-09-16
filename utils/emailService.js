@@ -23,7 +23,7 @@ const enviarEmail = async ({ to, subject, html }) => {
     try {
         await transporter.sendMail({
             from: {
-                name: 'NaVibe Eventos',
+                name: 'VibeTicket Eventos',
                 address: process.env.EMAIL_USER
             },
             to,
@@ -82,7 +82,7 @@ const enviarEmailRejeicaoEvento = async (usuario, evento, motivo) => {
       
       <p style="color: #6c757d; font-size: 12px;">
         Atenciosamente,<br>
-        Equipe NaVibe Eventos
+        Equipe VibeTicket Eventos
       </p>
     </div>
   `;
@@ -133,10 +133,10 @@ const enviarEmailConfirmacaoEvento = async (usuario, evento) => {
                     <p><strong>Local:</strong> ${enderecoCompleto}</p>
                 </div>
 
-                <p>Obrigado por escolher a NaVibe Eventos para divulgar seu evento!</p>
+                <p>Obrigado por escolher a VibeTicket Eventos para divulgar seu evento!</p>
             </div>
             <div class="footer">
-                <p>Você recebeu este e-mail porque criou um evento na NaVibe Eventos.</p>
+                <p>Você recebeu este e-mail porque criou um evento na VibeTicket Eventos.</p>
             </div>
         </div>
     </body>

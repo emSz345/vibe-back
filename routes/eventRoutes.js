@@ -35,6 +35,16 @@ router.get('/estados', async (req, res) => {
 router.get('/aprovados', async (req, res) => {
   try {
     const query = { status: 'aprovado' };
+
+     if (req.query.search) {
+      const searchRegex = new RegExp(req.query.search, 'i');
+      query.$or = [
+        { nome: searchRegex },
+        { cidade: searchRegex },
+        { estado: searchRegex },
+        { descricao: searchRegex }
+      ];
+    }
     if (req.query.estado) {
       query.estado = req.query.estado;
     }

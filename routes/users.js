@@ -1,5 +1,4 @@
 // Arquivo: routes/users.js
-console.log("AMBIENTE ATUAL (NODE_ENV):", process.env.NODE_ENV);
 const express = require('express');
 const router = express.Router();
 const User = require('../models/User');
@@ -317,7 +316,7 @@ router.post('/forgot-password', async (req, res) => {
         const emailHtml = `
             <div style="font-family: Arial, sans-serif; text-align: center; color: #333;">
                 <h1 style="color: #007bff;">Redefinição de Senha</h1>
-                <p>Você solicitou a redefinição de senha para sua conta na NaVibe Eventos.</p>
+                <p>Você solicitou a redefinição de senha para sua conta na VibeTicket Eventos.</p>
                 <p>Clique no botão abaixo para redefinir sua senha:</p>
                 <a href="${resetLink}" style="background-color: #28a745; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; margin-top: 20px; display: inline-block;">Redefinir Senha</a>
                 <p style="margin-top: 20px;">Se você não solicitou esta redefinição, por favor, ignore este e-mail.</p>
@@ -327,7 +326,7 @@ router.post('/forgot-password', async (req, res) => {
 
         await enviarEmail({
             to: user.email,
-            subject: '🔑 Redefinição de Senha - NaVibe Eventos',
+            subject: '🔑 Redefinição de Senha - VibeTicket Eventos',
             html: emailHtml
         });
 
@@ -383,7 +382,7 @@ router.post('/register', upload.single('imagemPerfil'), async (req, res) => {
 
             const emailHtml = `
             <div style="font-family: Arial, sans-serif; text-align: center; color: #333;">
-                <h1 style="color: #007bff;">Bem-vindo(a) ao NaVibe Eventos, ${user.nome}!</h1>
+                <h1 style="color: #007bff;">Bem-vindo(a) ao VibeTicket Eventos, ${user.nome}!</h1>
                 <p>Seu cadastro foi iniciado. Por favor, clique no botão abaixo para verificar seu endereço de e-mail e ativar sua conta.</p>
                 <a href="${verificationLink}" style="background-color: #28a745; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; margin-top: 20px; display: inline-block;">Verificar meu E-mail</a>
                 <p style="margin-top: 20px;">Se você não se cadastrou, por favor, ignore este e-mail.</p>
