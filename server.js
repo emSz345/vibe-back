@@ -9,7 +9,7 @@ const huggingfaceRoutes = require('./routes/huggingfaceRoutes');
 const jwt = require('jsonwebtoken');
 const cookieParser = require('cookie-parser');
 
-
+// Exporte o middleware para ser usado em outros arquivos
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
@@ -30,7 +30,6 @@ const authenticateToken = (req, res, next) => {
 
     console.log('✅ Token válido - Decoded:', decoded);
 
-    // Verifique se userId existe no token decodificado
     if (!decoded.userId) {
       console.log('❌ userId não encontrado no token');
       return res.status(403).json({ message: 'Estrutura do token inválida' });
@@ -40,14 +39,13 @@ const authenticateToken = (req, res, next) => {
     next();
   });
 };
+module.exports = { app, authenticateToken }; // Exporte o middleware para ser usado nas rotas
 
 const uploadBaseDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadBaseDir)) {
   fs.mkdirSync(uploadBaseDir);
   console.log(`Pasta criada: ${uploadBaseDir}`);
 }
-
-
 
 const perfilImgDir = path.join(uploadBaseDir, 'perfil-img');
 const carrosselDir = path.join(uploadBaseDir, 'carrossel');
@@ -73,20 +71,18 @@ const PORT = process.env.PORT || 5000;
 const front = process.env.FRONTEND_URL;
 
 app.use(cors({
-  origin: front, // URL EXATA do seu frontend
-  credentials: true                // ESSENCIAL para cookies funcionar
+  origin: front,
+  credentials: true
 }));
 
 app.use(express.json());
 app.use(cookieParser());
 
-// Middleware para servir arquivos estáticos.
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use('/uploads/perfil-img', express.static(path.join(__dirname, 'uploads', 'perfil-img')));
 app.use('/uploads/carrossel', express.static(path.join(__dirname, 'uploads', 'carrossel')));
 
-// Conecta ao MongoDB
 mongoose.connect(process.env.MONGO_URI, {
   useNewUrlParser: true,
   useUnifiedTopology: true,
@@ -94,7 +90,6 @@ mongoose.connect(process.env.MONGO_URI, {
   .then(() => console.log("MongoDB conectado"))
   .catch((err) => console.error("Erro ao conectar MongoDB:", err));
 
-// Conecte as rotas da sua API usando o prefixo '/api'
 app.use('/api/users', userRoutes);
 app.use('/api/eventos', eventRoutes);
 app.use('/api/auth', userRoutes);
@@ -107,19 +102,13 @@ app.use('/split-pay', splitPayRoutes);
 app.use('/api/mercadopago', mercadopagoAuthRoutes);
 
 app.get('/api/eventos/verificar-estoque/:id', (req, res) => {
-  // Lógica para verificar o estoque do evento
-  // Utilize o req.params.id para obter o ID do evento
   res.status(200).json({ estoqueDisponivel: true });
 });
 
-
-// Rota 404 - Adicione esta rota no final, antes da inicialização do servidor
 app.use((req, res, next) => {
   res.status(404).send("Desculpe, a página que você procura não foi encontrada.");
 });
 
-// Inicia o servidor
 app.listen(PORT, () => {
   console.log(`Servidor rodando na porta ${PORT}`);
 });
-

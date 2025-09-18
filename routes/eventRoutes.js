@@ -35,20 +35,41 @@ router.get('/estados', async (req, res) => {
 router.get('/aprovados', async (req, res) => {
   try {
     const query = { status: 'aprovado' };
+    const searchTerm = req.query.search?.trim();
 
-     if (req.query.search) {
-      const searchRegex = new RegExp(req.query.search, 'i');
-      query.$or = [
-        { nome: searchRegex },
-        { cidade: searchRegex },
-        { estado: searchRegex },
-        { descricao: searchRegex }
-      ];
+    if (searchTerm) {
+      // Divide o termo de busca em palavras individuais
+      const searchWords = searchTerm.split(/\s+/).filter(word => word.length > 0);
+      
+      // Cria um array de regex para cada palavra
+      const searchRegexes = searchWords.map(word => new RegExp(word, 'i'));
+      
+      // Cria condições de busca para cada campo
+      const searchConditions = searchRegexes.map(regex => ({
+        $or: [
+          { nome: { $regex: regex } },
+          { cidade: { $regex: regex } },
+          { estado: { $regex: regex } },
+          { descricao: { $regex: regex } },
+          { categoria: { $regex: regex } }
+        ]
+      }));
+
+      // Adiciona todas as condições com operador $and
+      query.$and = searchConditions;
     }
+
     if (req.query.estado) {
-      query.estado = req.query.estado;
+      query.estado = new RegExp(req.query.estado, 'i');
     }
-    const eventos = await Event.find(query);
+
+    // Adiciona ordenação por relevância e data
+    const eventos = await Event.find(query)
+      .sort({ 
+        dataInicio: 1, // Eventos mais próximos primeiro
+        createdAt: -1  // Eventos mais recentes
+      });
+
     res.status(200).json(eventos);
   } catch (error) {
     res.status(500).json({ message: 'Erro ao buscar eventos aprovados', error: error.message });
