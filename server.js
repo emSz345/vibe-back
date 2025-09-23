@@ -58,6 +58,7 @@ if (!fs.existsSync(carrosselDir)) {
   console.log(`Subpasta criada: ${carrosselDir}`);
 }
 
+// Importe as rotas
 const userRoutes = require('./routes/users');
 const eventRoutes = require('./routes/eventRoutes');
 const carrosselRoutes = require('./routes/carrosselRoutes');
@@ -70,19 +71,28 @@ const mercadopagoAuthRoutes = require('./routes/mercadopagoAuthRoutes');
 const PORT = process.env.PORT || 5000;
 const front = process.env.FRONTEND_URL;
 
+// ORDEM CORRETA DOS MIDDLEWARES E ROTAS
+
+// A ROTA DO WEBHOOK deve ser a primeira a ser registrada para que o middleware express.json()
+// não interfira. O express.raw() está configurado DENTRO do arquivo de rotas payRoutes.js.
+app.use('/api/pagamento', payRoutes);
+
+// Demais middlewares globais que analisam o corpo da requisição.
+// Eles devem vir APÓS o middleware do webhook.
+app.use(express.json());
+app.use(cookieParser());
 app.use(cors({
   origin: front,
   credentials: true
 }));
 
-// app.use(express.json());
-app.use(cookieParser());
-
+// Middlewares para arquivos estáticos
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use('/uploads/perfil-img', express.static(path.join(__dirname, 'uploads', 'perfil-img')));
 app.use('/uploads/carrossel', express.static(path.join(__dirname, 'uploads', 'carrossel')));
 
+// Conexão com o MongoDB
 mongoose.connect(process.env.MONGO_URI, {
   useNewUrlParser: true,
   useUnifiedTopology: true,
@@ -90,25 +100,28 @@ mongoose.connect(process.env.MONGO_URI, {
   .then(() => console.log("MongoDB conectado"))
   .catch((err) => console.error("Erro ao conectar MongoDB:", err));
 
+// Outras rotas da API
 app.use('/api/users', userRoutes);
 app.use('/api/eventos', eventRoutes);
-app.use('/api/auth', userRoutes);
+app.use('/api/auth', userRoutes); // Note que esta rota está duplicada, considere remover se não for necessária.
 app.use('/api/carrossel', carrosselRoutes);
 app.use('/api/huggingface', huggingfaceRoutes);
 app.use('/api/compras', compraRoutes);
 app.use('/api/perfil', perfilRoutes);
-app.use('/api/pagamento', payRoutes);
 app.use('/split-pay', splitPayRoutes);
 app.use('/api/mercadopago', mercadopagoAuthRoutes);
 
+// Rota de teste
 app.get('/api/eventos/verificar-estoque/:id', (req, res) => {
   res.status(200).json({ estoqueDisponivel: true });
 });
 
+// Middleware de tratamento de 404
 app.use((req, res, next) => {
   res.status(404).send("Desculpe, a página que você procura não foi encontrada.");
 });
 
+// Inicia o servidor
 app.listen(PORT, () => {
   console.log(`Servidor rodando na porta ${PORT}`);
 });

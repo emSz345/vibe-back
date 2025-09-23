@@ -4,8 +4,6 @@ const router = express.Router();
 const axios = require('axios');
 const User = require('../models/User'); // Importe seu modelo de usuário
 
-router.use(express.json());
-
 // Configure as credenciais do Mercado Pago no seu arquivo .env
 const MERCADOPAGO_CLIENT_ID = process.env.MERCADOPAGO_CLIENT_ID;
 const MERCADOPAGO_CLIENT_SECRET = process.env.MERCADOPAGO_CLIENT_SECRET;

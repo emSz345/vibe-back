@@ -4,8 +4,6 @@ const Compra = require('../models/Compra');
 const Event = require('../models/Event');
 const jwt = require('jsonwebtoken');
 
-router.use(express.json());
-
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];

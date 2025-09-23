@@ -11,8 +11,6 @@ const { enviarEmail } = require('../utils/emailService');
 const fs = require('fs');
 const authMiddleware = require('../authMiddleware'); // <-- Seu middleware agora corrigido
 
-router.use(express.json());
-
 const SECRET = process.env.JWT_SECRET;
 const UPLOAD_DIR = 'uploads/perfil-img';
 const DEFAULT_AVATAR_FILENAME = 'blank_profile.png';

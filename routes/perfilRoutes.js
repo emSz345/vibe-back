@@ -4,8 +4,6 @@ const Perfil = require('../models/Perfil');
 
 const router = express.Router();
 
-router.use(express.json());
-
 router.put('/salvar/:userId', async (req, res) => {
   const { userId } = req.params;
   const { tipoPessoa, dadosPessoais, dadosOrganizacao } = req.body;

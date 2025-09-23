@@ -2,8 +2,6 @@
 const express = require('express');
 const router = express.Router(); 
 
-router.use(express.json());
-
 const { MercadoPagoConfig, Preference } = require('mercadopago');
 
 const client = new MercadoPagoConfig({ accessToken: process.env.MP_TOKEN });
