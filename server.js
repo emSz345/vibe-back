@@ -67,6 +67,8 @@ const payRoutes = require('./routes/payRoutes');
 const splitPayRoutes = require('./routes/splitPayRoutes');
 const mercadopagoAuthRoutes = require('./routes/mercadopagoAuthRoutes');
 
+const webhookRouter = require('./routes/webhook'); 
+
 const PORT = process.env.PORT || 5000;
 const front = process.env.FRONTEND_URL;
 
@@ -78,6 +80,8 @@ credentials: true
 app.use(express.json());
 // app.use(express.json());
 app.use(cookieParser());
+
+app.use('/api/webhook', webhookRouter); 
 
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
