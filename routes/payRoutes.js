@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { MercadoPagoConfig, Payment, Preference } = require('mercadopago');
-const Ingresso = require('../models/Ingresso'); // Importe o modelo de ingresso
+const Ingresso = require('../models/ingresso'); // Importe o modelo de ingresso
 const { authenticateToken } = require('../server'); // Importe o middleware de autenticação
 
 // O cliente precisa ser configurado com o token, mas a escolha do token (teste/prod)
