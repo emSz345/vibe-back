@@ -114,8 +114,6 @@ app.use((req, res, next) => {
 res.status(404).send("Desculpe, a página que você procura não foi encontrada.");
 });
 
-const PORT = process.env.PORT || 8080;
-
 app.listen(PORT, () => {
-    console.log(`Servidor rodando na porta ${PORT}`);
+console.log(`Servidor rodando na porta ${PORT}`);
 });
