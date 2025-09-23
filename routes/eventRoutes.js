@@ -4,6 +4,9 @@ const Event = require('../models/Event');
 const User = require('../models/User');
 const multer = require('multer');
 const path = require('path');
+
+router.use(express.json());
+
 const { enviarEmailConfirmacaoEvento, enviarEmailRejeicaoEvento } = require('../utils/emailService');
 
 // IMPORTA O MIDDLEWARE CORRETO QUE LÊ COOKIES

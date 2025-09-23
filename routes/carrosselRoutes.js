@@ -6,6 +6,8 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 
+router.use(express.json());
+
 const CarrosselImage = require('../models/CarrosselImage');
 
 // Garante que a pasta de uploads do carrossel exista

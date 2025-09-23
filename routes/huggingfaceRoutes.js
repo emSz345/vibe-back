@@ -3,6 +3,8 @@ const router = express.Router();
 const { InferenceClient } = require('@huggingface/inference');
 const Event = require('../models/Event');
 
+router.use(express.json());
+
 // Inicializar cliente do Hugging Face com a nova API
 const client = new InferenceClient(process.env.HF_TOKEN);
 
