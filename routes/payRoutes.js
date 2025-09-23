@@ -4,6 +4,8 @@ const { MercadoPagoConfig, Payment, Preference } = require('mercadopago');
 const Ingresso = require('../models/ingresso'); // Importe o modelo de ingresso
 const { authenticateToken } = require('../server'); // Importe o middleware de autenticação
 
+// O cliente precisa ser configurado com o token, mas a escolha do token (teste/prod)
+// deve ser feita no webhook
 const client = new MercadoPagoConfig({ accessToken: process.env.MP_TOKEN });
 
 // Rota para criar a preferência de pagamento (mantida e melhorada)
@@ -42,65 +44,123 @@ router.post("/create-preference", async (req, res) => {
     }
 });
 
-// Rota de webhook para SALVAR o ingresso (adicionada)
-// Esta URL deve ser configurada no painel de webhooks do Mercado Pago
-// Rota de webhook para SALVAR o ingresso (atualizada)
+
+// Rota de webhook para SALVAR o ingresso (atualizada para lidar com múltiplos tipos de evento)
 router.post("/webhook", async (req, res) => {
-    const { data, type } = req.body;
+    const { data, type, live_mode } = req.body;
 
-    // Log para ver o que o Mercado Pago enviou.
-    console.log("Webhook recebido. Tipo:", type, "Dados:", data);
+    console.log("Webhook recebido. Tipo:", type, "Live Mode:", live_mode, "Dados:", data);
 
-    if (type === "payment") {
-        const paymentId = data.id;
-        const payment = new Payment(client);
+    // Usa um switch para lidar com diferentes tipos de evento de forma organizada
+    switch (type) {
+        case "payment": {
+            // Lógica para pagamentos tradicionais (cartão, boleto, etc.)
+            const paymentId = data.id;
 
-        try {
-            const paymentDetails = await payment.get({ id: paymentId });
-            const { status, metadata, additional_info } = paymentDetails.body;
+            const client = new MercadoPagoConfig({
+                accessToken: live_mode ? process.env.MP_TOKEN : process.env.MP_TEST_TOKEN
+            });
+            const payment = new Payment(client);
 
-            // Log para inspecionar os detalhes do pagamento. Isso é crucial para depuração.
-            console.log("Detalhes do pagamento:", paymentDetails.body);
+            try {
+                const paymentDetails = await payment.get({ id: paymentId });
+                const { status, metadata, additional_info } = paymentDetails.body;
 
-            if (status === "approved") {
-                // Verificar se os dados necessários existem antes de prosseguir
-                if (!metadata || !metadata.user_id) {
-                    console.error("Erro: user_id não encontrado na metadata do webhook.");
-                    return res.status(400).send("Dados do usuário ausentes.");
+                console.log("Detalhes do pagamento:", paymentDetails.body);
+
+                if (status === "approved") {
+                    if (!metadata || !metadata.user_id) {
+                        console.error("Erro: user_id não encontrado na metadata do webhook.");
+                        return res.status(400).send("Dados do usuário ausentes.");
+                    }
+                    if (!additional_info || !additional_info.items || additional_info.items.length === 0) {
+                        console.error("Erro: Itens da compra não encontrados na additional_info.");
+                        return res.status(400).send("Itens da compra ausentes.");
+                    }
+
+                    const userId = metadata.user_id;
+                    const ingressosASalvar = additional_info.items.map(item => ({
+                        userId: userId,
+                        paymentId: paymentId,
+                        nomeEvento: item.title,
+                        dataEvento: "Data do Evento",
+                        valor: item.unit_price,
+                        status: "Pago"
+                    }));
+
+                    await Ingresso.insertMany(ingressosASalvar);
+                    console.log(`✅ Ingresso(s) salvo(s) com sucesso para o usuário ${userId}.`);
+                } else {
+                    console.log(`Pagamento com ID ${paymentId} não foi aprovado. Status: ${status}`);
                 }
-
-                if (!additional_info || !additional_info.items || additional_info.items.length === 0) {
-                    console.error("Erro: Itens da compra não encontrados na additional_info.");
-                    return res.status(400).send("Itens da compra ausentes.");
-                }
-
-                const userId = metadata.user_id;
-
-                const ingressosASalvar = additional_info.items.map(item => ({
-                    userId: userId,
-                    paymentId: paymentId,
-                    nomeEvento: item.title,
-                    dataEvento: "Data do Evento", // Substitua pela data real do evento
-                    valor: item.unit_price,
-                    status: "Pago"
-                }));
-
-                await Ingresso.insertMany(ingressosASalvar);
-                console.log(`✅ Ingresso(s) salvo(s) com sucesso para o usuário ${userId}.`);
-
-            } else {
-                console.log(`Pagamento com ID ${paymentId} não foi aprovado. Status: ${status}`);
+                res.status(200).send("OK");
+            } catch (error) {
+                console.error("❌ Erro ao processar o webhook do Mercado Pago:", error);
+                res.status(500).send("Erro interno ao processar o webhook.");
             }
-
-            // Sempre retorne um 200 OK para o Mercado Pago, mesmo que o status não seja 'approved'
-            res.status(200).send("OK");
-        } catch (error) {
-            console.error("❌ Erro ao processar o webhook do Mercado Pago:", error);
-            res.status(500).send("Erro interno ao processar o webhook.");
+            break;
         }
-    } else {
-        // Ignora outros tipos de webhook, como 'merchant_order'
-        res.status(200).send("OK");
+
+        case "wallet_connect": {
+            // Lógica para pagamentos com Wallet Connect
+            // A estrutura do webhook pode ser diferente, então inspecione os logs!
+            
+            // O ID do pagamento ainda deve estar em 'data.id'
+            const paymentId = data.id; 
+
+            // **AVISO**: A lógica abaixo é um palpite. Você precisa verificar os logs
+            // para ver se a estrutura 'metadata', 'additional_info', etc. é a mesma.
+            // Se a estrutura for diferente, você precisará adaptar o código.
+
+            const client = new MercadoPagoConfig({
+                accessToken: live_mode ? process.env.MP_TOKEN : process.env.MP_TEST_TOKEN
+            });
+            const payment = new Payment(client);
+
+            try {
+                const paymentDetails = await payment.get({ id: paymentId });
+                const { status, metadata, additional_info } = paymentDetails.body;
+
+                console.log("Detalhes do pagamento Wallet Connect:", paymentDetails.body);
+
+                if (status === "approved") {
+                    if (!metadata || !metadata.user_id) {
+                        console.error("Erro: user_id não encontrado na metadata do webhook para Wallet Connect.");
+                        return res.status(400).send("Dados do usuário ausentes.");
+                    }
+                    if (!additional_info || !additional_info.items || additional_info.items.length === 0) {
+                        console.error("Erro: Itens da compra não encontrados na additional_info.");
+                        return res.status(400).send("Itens da compra ausentes.");
+                    }
+
+                    const userId = metadata.user_id;
+                    const ingressosASalvar = additional_info.items.map(item => ({
+                        userId: userId,
+                        paymentId: paymentId,
+                        nomeEvento: item.title,
+                        dataEvento: "Data do Evento",
+                        valor: item.unit_price,
+                        status: "Pago"
+                    }));
+
+                    await Ingresso.insertMany(ingressosASalvar);
+                    console.log(`✅ Ingresso(s) salvo(s) com sucesso para o usuário ${userId} via Wallet Connect.`);
+                } else {
+                    console.log(`Pagamento com ID ${paymentId} via Wallet Connect não foi aprovado. Status: ${status}`);
+                }
+                res.status(200).send("OK");
+            } catch (error) {
+                console.error("❌ Erro ao processar o webhook de Wallet Connect:", error);
+                res.status(500).send("Erro interno ao processar o webhook.");
+            }
+            break;
+        }
+
+        default: {
+            console.log(`Tipo de webhook '${type}' não suportado. Ignorando.`);
+            res.status(200).send("OK");
+            break;
+        }
     }
 });
 
