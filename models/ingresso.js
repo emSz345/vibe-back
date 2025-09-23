@@ -1,36 +1,35 @@
 const mongoose = require('mongoose');
 
 const ingressoSchema = new mongoose.Schema({
-    userId: { 
-        type: String, 
-        required: true 
+    userId: {
+        type: String,
+        required: true
     },
     paymentId: {
         type: String,
         required: true,
-        unique: true // Garante que não haverá duplicidade de pagamentos
+        unique: true
     },
-    nomeEvento: { 
-        type: String, 
-        required: true 
+    nomeEvento: {
+        type: String,
+        required: true
     },
     dataEvento: {
         type: String,
         required: true
     },
-    valor: { 
-        type: Number, 
-        required: true 
+    valor: {
+        type: Number,
+        required: true
     },
     status: {
         type: String,
         required: true,
-        enum: ['Pago', 'Pendente', 'Cancelado'], // Status possíveis
+        enum: ['Pago', 'Pendente', 'Cancelado'],
         default: 'Pendente'
     },
-    // Você pode adicionar mais campos se precisar, como local, tipo de ingresso, etc.
 }, { timestamps: true });
 
-const Ingresso = mongoose.model('Ingresso', ingressoSchema);
+const Ingresso = mongoose.models.Ingresso || mongoose.model('Ingresso', ingressoSchema);
 
 module.exports = Ingresso;
