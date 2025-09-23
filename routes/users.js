@@ -64,16 +64,18 @@ router.post('/login', async (req, res) => {
 
         const cookieOptions = {
             httpOnly: true,
-            maxAge: 7 * 24 * 60 * 60 * 1000, // 7 dias
-            // A lógica crucial está aqui:
-            secure: process.env.NODE_ENV === 'production', // Cookie seguro apenas em produção (HTTPS)
-            sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', // 'none' para produção (cross-site), 'lax' para desenvolvimento
+            maxAge: 7 * 24 * 60 * 60 * 1000,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
         };
 
+        // Seu código já salva o token no cookie. Vamos mantê-lo.
         res.cookie('authToken', token, cookieOptions);
 
+        // CORREÇÃO: Envie o token também no corpo da resposta JSON.
         res.status(200).json({
             message: 'Login realizado com sucesso',
+            token: token, // <--- ADICIONE ESTA LINHA
             user: {
                 _id: user._id,
                 nome: user.nome,
