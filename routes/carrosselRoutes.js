@@ -35,11 +35,21 @@ router.post('/upload', upload.single('image'), async (req, res) => {
             return res.status(400).json({ message: 'Nenhum arquivo enviado.' });
         }
 
-        // Cria uma nova entrada no banco de dados com o nome do arquivo
-        const newImage = new CarrosselImage({ filename: req.file.filename });
+        // Extrai o eventoId do corpo da requisição
+        const { eventoId } = req.body;
+
+        // Cria uma nova entrada no banco de dados
+        const newImage = new CarrosselImage({ 
+            filename: req.file.filename,
+            eventoId: eventoId || null
+        });
         await newImage.save();
 
-        res.status(201).json({ message: 'Imagem enviada e salva com sucesso!', filename: req.file.filename });
+        res.status(201).json({ 
+            message: 'Imagem enviada e salva com sucesso!', 
+            filename: req.file.filename,
+            eventoId: eventoId || null
+        });
     } catch (error) {
         console.error('Erro ao fazer upload da imagem:', error);
         res.status(500).json({ message: 'Erro no servidor ao salvar a imagem.' });
@@ -50,27 +60,42 @@ router.post('/upload', upload.single('image'), async (req, res) => {
 router.get('/', async (req, res) => {
     try {
         const images = await CarrosselImage.find({});
-        // Retorna apenas o nome do arquivo de cada imagem para o frontend
-        res.status(200).json(images.map(img => img.filename));
+        // Retorna informações completas incluindo eventoId
+        res.status(200).json(images.map(img => ({
+            filename: img.filename,
+            eventoId: img.eventoId
+        })));
     } catch (error) {
         console.error('Erro ao buscar imagens do carrossel:', error);
         res.status(500).json({ message: 'Erro no servidor ao buscar as imagens.' });
     }
 });
 
+
+
 // Rota DELETE para remover uma imagem
 router.delete('/delete/:imageName', async (req, res) => {
     try {
         const { imageName } = req.params;
-        const imagePath = path.join(carrosselDir, imageName);
+        
+        // Decodifica o nome do arquivo para lidar com caracteres especiais
+        const decodedImageName = decodeURIComponent(imageName);
+        const imagePath = path.join(carrosselDir, decodedImageName);
 
         // Remove o arquivo da pasta 'uploads/carrossel'
         if (fs.existsSync(imagePath)) {
             fs.unlinkSync(imagePath);
+        } else {
+            console.warn(`Arquivo não encontrado: ${imagePath}`);
+            return res.status(404).json({ message: 'Arquivo não encontrado.' });
         }
 
         // Remove a referência da imagem do banco de dados
-        await CarrosselImage.deleteOne({ filename: imageName });
+        const result = await CarrosselImage.deleteOne({ filename: decodedImageName });
+        
+        if (result.deletedCount === 0) {
+            return res.status(404).json({ message: 'Imagem não encontrada no banco de dados.' });
+        }
 
         res.status(200).json({ message: 'Imagem removida com sucesso!' });
     } catch (error) {
