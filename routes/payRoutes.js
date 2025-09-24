@@ -1,14 +1,13 @@
 const express = require('express');
 const router = express.Router();
-const { MercadoPagoConfig, Payment, Preference } = require('mercadopago');
+const { MercadoPagoConfig, Preference, Payment } = require('mercadopago'); // Importe 'Payment'
 const Ingresso = require('../models/ingresso'); // Importe o modelo de ingresso
 const { authenticateToken } = require('../server'); // Importe o middleware de autenticação
 
-// O cliente precisa ser configurado com o token, mas a escolha do token (teste/prod)
-// deve ser feita no webhook
+// O cliente é configurado globalmente, mas o token é dinâmico no webhook.
 const client = new MercadoPagoConfig({ accessToken: process.env.MP_TOKEN });
 
-// Rota para criar a preferência de pagamento (mantida e melhorada)
+// Rota para criar a preferência de pagamento
 router.post("/create-preference", async (req, res) => {
     const { items, userId } = req.body;
 
@@ -23,9 +22,9 @@ router.post("/create-preference", async (req, res) => {
             body: {
                 items: items,
                 back_urls: {
-                    success: `${process.env.BASE_URL}/meus-ingressos?status=approved`,
-                    pending: `${process.env.BASE_URL}/meus-ingressos?status=pending`,
-                    failure: `${process.env.BASE_URL}/meus-ingressos?status=rejected`,
+                    success: `${process.env.FRONTEND_URL}/meus-ingressos?status=approved`,
+                    pending: `${process.env.FRONTEND_URL}/meus-ingressos?status=pending`,
+                    failure: `${process.env.FRONTEND_URL}/meus-ingressos?status=rejected`,
                 },
                 auto_return: "approved",
                 metadata: {
@@ -44,30 +43,24 @@ router.post("/create-preference", async (req, res) => {
     }
 });
 
+// ---
 
-// Rota de webhook para SALVAR o ingresso (atualizada para lidar com múltiplos tipos de evento)
-router.post("/webhook", express.raw({ type: '*/*' }), async (req, res) => {
-    let payload;
-    try {
-        // Tenta analisar o buffer da requisição como JSON
-        payload = JSON.parse(req.body.toString());
-    } catch (err) {
-        console.error("❌ Erro ao analisar o corpo do webhook:", err);
-        return res.status(400).send('Webhook inválido.');
-    }
+// Middleware específico para a rota de webhook para processar o corpo raw
+router.use(express.raw({ type: '*/*' }));
 
-    const { data, type, live_mode } = payload;
+// Rota de webhook para SALVAR o ingresso
+router.post("/webhook", async (req, res) => {
+    // O req.body já é um objeto JavaScript graças ao express.json()
+    const { data, type, live_mode } = req.body;
 
     console.log("Webhook recebido. Tipo:", type, "Live Mode:", live_mode, "Dados:", data);
 
-    // Usa um switch para lidar com diferentes tipos de evento de forma organizada
     switch (type) {
         case "payment": {
-            // Lógica para pagamentos tradicionais (cartão, boleto, etc.)
             const paymentId = data.id;
 
             const client = new MercadoPagoConfig({
-                accessToken: live_mode ? process.env.MP_TOKEN : process.env.MP_TEST_TOKEN
+                accessToken: process.env.MP_TOKEN
             });
             const payment = new Payment(client);
 
@@ -118,9 +111,10 @@ router.post("/webhook", express.raw({ type: '*/*' }), async (req, res) => {
     }
 });
 
-// Rota para LISTAR os ingressos do usuário (adicionada e protegida)
+// ---
+
+// Rota para LISTAR os ingressos do usuário
 router.get("/ingressos/user", authenticateToken, async (req, res) => {
-    // Usamos o ID do usuário do token (req.user.userId) para segurança
     const userId = req.user.userId;
 
     try {
