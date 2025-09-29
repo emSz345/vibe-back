@@ -160,20 +160,20 @@ router.get('/me', authMiddleware, async (req, res) => {
 
 // --- ROTA SOCIAL LOGIN ---
 // <-- CORREÇÃO: Apliquei a mesma lógica de cookie aqui
+// Adicione esta rota no seu users.js (backend)
 router.post('/social-login', async (req, res) => {
-    const { userData } = req.body;
+    const { provider, userData } = req.body;
 
     try {
         let user = await User.findOne({ email: userData.email });
 
         if (!user) {
-            // Cria um novo usuário se não existir
             user = new User({
-                nome: userData.name,
+                nome: userData.nome,
                 email: userData.email,
-                provedor: userData.provider,
-                imagemPerfil: userData.picture, // Assumindo que a URL da imagem vem aqui
-                isVerified: true, // Login social já é considerado verificado
+                provedor: provider,
+                imagemPerfil: userData.imagemPerfil,
+                isVerified: true,
             });
             await user.save();
         }
@@ -187,8 +187,10 @@ router.post('/social-login', async (req, res) => {
             maxAge: 7 * 24 * 60 * 60 * 1000,
         });
 
+        // CORREÇÃO: Enviar o token também no corpo da resposta
         res.status(200).json({
             message: 'Login social realizado com sucesso',
+            token: token, // ← IMPORTANTE: Enviar o token na resposta
             user: {
                 _id: user._id,
                 nome: user.nome,
