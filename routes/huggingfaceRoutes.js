@@ -45,6 +45,7 @@ Sua função é ajudar usuários a:
 - Ajudar com criação de eventos
 - Responder sobre perfis de usuário
 - Fornecer informações sobre o sistema
+- Gerenciar carrinho de compras (adicionar, remover, listar, limpar, finalizar compra)
 
 ESTILO DE RESPOSTA:
 - Amigável e empolgada (use emojis quando apropriado)
@@ -55,31 +56,21 @@ INFORMAÇÕES SOBRE O SISTEMA:
 - Plataforma: NaVibe Eventos
 - Categorias disponíveis: Rock, Sertanejo, Eletrônica, Pop, MPB, Forró, Pagode, Jazz, Blues, Clássica, Teatro, Dança, Stand-up, Festival, Infantil, Esportes, Gastronomia, Workshop, Funk, Outros
 
-FUNCIONALIDADES DE NAVEGAÇÃO:
-- Quando o usuário pedir para ir para uma página, SEMPRE inclua o comando de navegação no estado
-- NUNCA diga "você já está na tela" - sempre execute a navegação se solicitado
-- Seções disponíveis com seus caminhos:
-  * Perfil -> /perfil
-  * Carrinho -> /carrinho
-  * Meus Eventos -> /meus-eventos
-  * Meus Ingressos -> /meus-ingressos
-  * Cadastro -> /cadastro
-  * Login -> /login
-  * Painel Admin -> /painel
-  * Página Inicial -> /home
-  * Categorias -> /categorias
-  * Termos -> /termos
-  * Dúvidas -> /duvidas
+FUNCIONALIDADES DE CARRINHO:
+- Quando o usuário pedir para ver o carrinho, liste os itens com preços
+- Para remover itens, forneça quick replies com ações
+- Sempre mostre o total do carrinho
+- Para finalizar compra, redirecione para a página de carrinho
 
-EXEMPLOS CORRETOS:
-Usuário: "quero ir pro meu perfil"
-Resposta: "Claro! Te levo para seu perfil 👤" + {navegarPara: "/perfil"}
+EXEMPLOS CORRETOS PARA CARRINHO:
+Usuário: "ver carrinho"
+Resposta: "🛒 Seu Carrinho:\n\n1. Show do Rock\n   📅 15/12/2024\n   🎫 2x R$ 50,00\n   💰 Subtotal: R$ 100,00\n\n💰 TOTAL: R$ 100,00"
 
-Usuário: "como acesso o carrinho?"
-Resposta: "Vamos para o carrinho de compras! 🛒" + {navegarPara: "/carrinho"}
+Usuário: "limpar carrinho"
+Resposta: "🧹 Carrinho limpo! Todos os itens foram removidos."
 
-Usuário: "meus eventos"
-Resposta: "Redirecionando para meus eventos... 🎪" + {navegarPara: "/meus-eventos"}
+Usuário: "finalizar compra"
+Resposta: "✅ Te levando para finalizar sua compra... 🚀"
 
 \n\nIMPORTANTE FINAL: Responda APENAS com texto puro para o usuário, como um assistente natural conversando.
 `;
@@ -158,33 +149,6 @@ async function buscarEventos(filtros = {}) {
   }
 }
 
-function normalizarEstado(nomeEstado) {
-  const mapeamentoEstados = {
-    'sao paulo': 'SP',
-    'são paulo': 'SP',
-    'rio de janeiro': 'RJ',
-    'minas gerais': 'MG',
-    'espirito santo': 'ES',
-    'espírito santo': 'ES',
-    'rio grande do sul': 'RS',
-    'parana': 'PR',
-    'paraná': 'PR',
-    'santa catarina': 'SC',
-    'bahia': 'BA',
-    'ceara': 'CE',
-    'ceará': 'CE',
-    'pernambuco': 'PE',
-    'goias': 'GO',
-    'goiás': 'GO',
-    'para': 'PA',
-    'pará': 'PA',
-    'amazonas': 'AM',
-    // ... adicione outros estados
-  };
-
-  return mapeamentoEstados[nomeEstado.toLowerCase()] || nomeEstado;
-}
-
 function extrairValorMonetario(mensagem) {
   const regexValor = /(?:R\$\s*)?(\d+[\.,]?\d*)(?:\s*reais)?/i;
   const match = mensagem.match(regexValor);
@@ -196,7 +160,6 @@ function extrairValorMonetario(mensagem) {
   }
   return null;
 }
-
 
 // Extrair intenções e parâmetros da mensagem do usuário
 function analisarMensagem(mensagem) {
@@ -215,7 +178,9 @@ function analisarMensagem(mensagem) {
     perfil: /(perfil|minha conta|meus dados|editar perfil)/i,
     ajuda: /(ajuda|como funciona|help|suporte|dúvida)/i,
     sobre: /(quem é você|o que você faz|vibe bot|sua função)/i,
-    navegacao: /(me leve|me leve para|quero ir|acessar|ir para|ver (meus|o)|como (chego|acesso)) (perfil|carrinho|meus eventos|meus ingressos|cadastro|login|painel|admin|eventos|categorias|termos|dúvidas)/i
+    navegacao: /(me leve|me leve para|quero ir|acessar|ir para|ver (meus|o)|como (chego|acesso)) (perfil|carrinho|meus eventos|meus ingressos|cadastro|login|painel|admin|eventos|categorias|termos|dúvidas)/i,
+    carrinho: /(carrinho|meu carrinho|itens do carrinho|compras|finalizar compra|remover item|deletar item|ver carrinho|limpar carrinho|esvaziar carrinho)/i,
+    adicionarCarrinho: /(adicionar|comprar|colocar no carrinho|quero ingressos?)/i,
   };
 
   const intencaoDetectada = Object.keys(intencoes).find(key =>
@@ -259,12 +224,11 @@ function analisarMensagem(mensagem) {
     };
   }
 
-
   const precoRegex = /(menor preço|mais barato|mais econômico|maior preço|mais caro)/i;
   if (precoRegex.test(mensagemLower)) {
     return {
       intent: 'preco',
-      parameters: parametros, // ✅ CORRETO: usa parametros que já foram preenchidos
+      parameters: parametros,
       confidence: 0.9
     };
   }
@@ -300,6 +264,59 @@ function analisarMensagem(mensagem) {
       parametros.localizacao = cidadeDetectada;
     }
   }
+
+  // Processar intenções de carrinho
+  if (intencaoDetectada === 'carrinho') {
+    // Verificar se é para limpar o carrinho
+    if (mensagemLower.includes('limpar') || mensagemLower.includes('esvaziar')) {
+      return {
+        intent: 'limparCarrinho',
+        parameters: {},
+        confidence: 0.9
+      };
+    }
+    
+    // Verificar se é para finalizar compra
+    if (mensagemLower.includes('finalizar') || mensagemLower.includes('comprar') || mensagemLower.includes('checkout')) {
+      return {
+        intent: 'finalizarCompra',
+        parameters: {},
+        confidence: 0.9
+      };
+    }
+    
+    // Verificar se é para remover item específico
+    const removerRegex = /(remover|deletar|excluir).*?(item|ingresso)?\s*(\d+)/i;
+    const matchRemover = mensagem.match(removerRegex);
+    if (matchRemover && matchRemover[3]) {
+      return {
+        intent: 'removerItemCarrinho',
+        parameters: { itemIndex: parseInt(matchRemover[3]) - 1 },
+        confidence: 0.8
+      };
+    }
+    
+    return {
+      intent: 'verCarrinho',
+      parameters: {},
+      confidence: 0.9
+    };
+  }
+
+  if (intencaoDetectada === 'adicionarCarrinho') {
+    // Extrair informações do evento para adicionar ao carrinho
+    const eventoMatch = mensagem.match(/(?:adicionar|comprar).*?(\d+).*?(ingressos?)?/i);
+    const quantidade = eventoMatch && eventoMatch[1] ? parseInt(eventoMatch[1]) : 1;
+    
+    return {
+      intent: 'adicionarCarrinho',
+      parameters: { 
+        quantidade: quantidade,
+      },
+      confidence: 0.8
+    };
+  }
+
   // 🔍 LOG DE DEBUG
   console.log("🧩 Análise da mensagem:", { intent: intencaoDetectada, parametros });
 
@@ -338,10 +355,102 @@ function detectarDestinoNavegacao(mensagem) {
   return null;
 }
 
+// Funções para gerenciar carrinho
+function gerenciarCarrinho(acao, parametros, carrinhoAtual = []) {
+  let novoCarrinho = [...carrinhoAtual];
+  let quickReplies = [];
+
+  switch (acao) {
+    case 'verCarrinho':
+      if (novoCarrinho.length === 0) {
+        return {
+          textoResposta: "🛒 Seu carrinho está vazio! Que tal explorar alguns eventos? 🎪",
+          carrinho: novoCarrinho,
+          quickReplies: [
+            { text: "🎪 Ver eventos", action: "verEventos" }
+          ]
+        };
+      } else {
+        const total = novoCarrinho.reduce((acc, item) => acc + (item.preco * item.quantidade), 0);
+        
+        let textoResposta = "🛒 **Seu Carrinho:**\n\n";
+        novoCarrinho.forEach((item, index) => {
+          textoResposta += `${index + 1}. **${item.nomeEvento}**\n`;
+          textoResposta += `   📅 ${item.dataEvento}\n`;
+          textoResposta += `   🎫 ${item.quantidade}x R$ ${item.preco.toFixed(2)}\n`;
+          textoResposta += `   💰 Subtotal: R$ ${(item.preco * item.quantidade).toFixed(2)}\n\n`;
+        });
+        textoResposta += `**💰 TOTAL: R$ ${total.toFixed(2)}**`;
+        
+        return {
+          textoResposta: textoResposta,
+          carrinho: novoCarrinho,
+          quickReplies: [
+            { text: "🗑️ Remover item", action: "removerItem" },
+            { text: "🧹 Limpar carrinho", action: "limparCarrinho" },
+            { text: "✅ Finalizar compra", action: "finalizarCompra" }
+          ]
+        };
+      }
+
+    case 'limparCarrinho':
+      novoCarrinho = [];
+      return {
+        textoResposta: "🧹 Carrinho limpo com sucesso! Todos os itens foram removidos.",
+        carrinho: novoCarrinho,
+        quickReplies: [
+          { text: "🎪 Ver eventos", action: "verEventos" }
+        ]
+      };
+
+    case 'removerItemCarrinho':
+      const itemIndex = parametros.itemIndex;
+      if (itemIndex >= 0 && itemIndex < novoCarrinho.length) {
+        const itemRemovido = novoCarrinho[itemIndex];
+        novoCarrinho.splice(itemIndex, 1);
+        return {
+          textoResposta: `🗑️ "${itemRemovido.nomeEvento}" removido do carrinho!`,
+          carrinho: novoCarrinho,
+          quickReplies: [
+            { text: "🛒 Ver carrinho", action: "verCarrinho" },
+            { text: "🎪 Continuar comprando", action: "verEventos" }
+          ]
+        };
+      }
+      break;
+
+    case 'finalizarCompra':
+      if (novoCarrinho.length === 0) {
+        return {
+          textoResposta: "🛒 Seu carrinho está vazio! Adicione alguns eventos antes de finalizar a compra.",
+          carrinho: novoCarrinho,
+          quickReplies: [
+            { text: "🎪 Ver eventos", action: "verEventos" }
+          ]
+        };
+      } else {
+        return {
+          textoResposta: "✅ Te levando para finalizar sua compra... 🚀",
+          carrinho: novoCarrinho,
+          navegarPara: "/carrinho"
+        };
+      }
+
+    default:
+      break;
+  }
+
+  return {
+    textoResposta: "",
+    carrinho: novoCarrinho,
+    quickReplies: []
+  };
+}
+
 // Rota principal do chatbot
 router.post('/chat', async (req, res) => {
   try {
-    const { message, state = {} } = req.body;
+    const { message, state = {}, carrinho = [] } = req.body;
     const userId = req.headers['user-id'];
 
     if (!message) {
@@ -360,12 +469,13 @@ router.post('/chat', async (req, res) => {
     let categoriasDisponiveis = [];
     let showCommands = true;
     let novoEstado = { ...state };
-
-
+    let quickReplies = [];
+    let textoResposta = "";
+    let carrinhoAtual = [...carrinho];
+    let navegarPara = null;
 
     // Processar com base na intenção detectada
     switch (analise.intent) {
-
       case 'navegacao':
         console.log("🧭 Intenção de navegação detectada");
         const destino = detectarDestinoNavegacao(message);
@@ -375,15 +485,25 @@ router.post('/chat', async (req, res) => {
           novoEstado.navegarPara = destino;
           console.log("📍 Comando de navegação adicionado:", destino);
 
-          // Interromper processamento adicional para navegação
           eventos = [];
           categoriasDisponiveis = [];
           showCommands = false;
-
-          // Forçar a saída do switch-case após processar navegação
           break;
         }
         break;
+
+      case 'verCarrinho':
+      case 'limparCarrinho':
+      case 'removerItemCarrinho':
+      case 'finalizarCompra':
+        const resultadoCarrinho = gerenciarCarrinho(analise.intent, analise.parameters, carrinhoAtual);
+        textoResposta = resultadoCarrinho.textoResposta;
+        carrinhoAtual = resultadoCarrinho.carrinho;
+        quickReplies = resultadoCarrinho.quickReplies || [];
+        navegarPara = resultadoCarrinho.navegarPara;
+        showCommands = false;
+        break;
+
       case 'buscarEventos':
         const filtros = { ...state, ...analise.parameters };
         eventos = await buscarEventos(filtros);
@@ -395,7 +515,6 @@ router.post('/chat', async (req, res) => {
         break;
 
       case 'preco':
-        // Extrair faixa de preço se mencionado
         const filtrosPreco = { ...state };
 
         if (analise.parameters.valorEspecifico) {
@@ -413,7 +532,6 @@ router.post('/chat', async (req, res) => {
           intent: 'preco'
         });
 
-        // Não persistir filtros de preço no estado longo prazo
         showCommands = eventos.length === 0;
         break;
 
@@ -426,41 +544,45 @@ router.post('/chat', async (req, res) => {
         novoEstado.localizacao = analise.parameters.localizacao;
         eventos = await buscarEventos(novoEstado);
         break;
-      // Extrair o destino da navegação
+
       default:
         if (Object.keys(novoEstado).length > 0) {
           eventos = await buscarEventos(novoEstado);
         }
     }
 
-    // Preparar contexto para o modelo
-    const contexto = `
-      Estado atual: ${JSON.stringify(novoEstado)}
-      Eventos encontrados: ${eventos.length}
-      ${eventos.length > 0 ? `Exemplo de evento: ${eventos[0].nome} em ${eventos[0].cidade}` : ''}
-      Categorias disponíveis: ${categoriasDisponiveis.join(', ')}
-    `.trim();
+    // Se já temos uma resposta do carrinho, usar ela
+    if (!textoResposta) {
+      // Preparar contexto para o modelo
+      const contexto = `
+        Estado atual: ${JSON.stringify(novoEstado)}
+        Eventos encontrados: ${eventos.length}
+        ${eventos.length > 0 ? `Exemplo de evento: ${eventos[0].nome} em ${eventos[0].cidade}` : ''}
+        Categorias disponíveis: ${categoriasDisponiveis.join(', ')}
+        Carrinho atual: ${carrinhoAtual.length} itens
+        ${carrinhoAtual.length > 0 ? `Itens no carrinho: ${carrinhoAtual.map(item => item.nomeEvento).join(', ')}` : ''}
+      `.trim();
 
-    // Chamar o modelo usando a nova API InferenceClient
-    const chatCompletion = await client.chatCompletion({
-      provider: "cerebras",
-      model: "openai/gpt-oss-120b",
-      messages: [
-        {
-          role: "system",
-          content: SYSTEM_PROMPT
-        },
-        {
-          role: "user",
-          content: `Contexto: ${contexto}\n\nMensagem do usuário: ${message}`
-        }
-      ],
-      max_tokens: 500,
-      temperature: 0.7
-    });
+      // Chamar o modelo usando a nova API InferenceClient
+      const chatCompletion = await client.chatCompletion({
+        provider: "cerebras",
+        model: "openai/gpt-oss-120b",
+        messages: [
+          {
+            role: "system",
+            content: SYSTEM_PROMPT
+          },
+          {
+            role: "user",
+            content: `Contexto: ${contexto}\n\nMensagem do usuário: ${message}`
+          }
+        ],
+        max_tokens: 500,
+        temperature: 0.7
+      });
 
-    // SIMPLIFICAÇÃO TOTAL: Apenas usar a resposta do modelo diretamente
-    let textoResposta = chatCompletion.choices[0].message.content;
+      textoResposta = chatCompletion.choices[0].message.content;
+    }
 
     // Construir resposta
     const resposta = {
@@ -472,7 +594,9 @@ router.post('/chat', async (req, res) => {
         eventos: eventos.slice(0, 5),
         categorias: categoriasDisponiveis,
         showCommands: showCommands,
-        state: novoEstado
+        state: { ...novoEstado, ...(navegarPara && { navegarPara }) },
+        quickReplies: quickReplies,
+        carrinho: carrinhoAtual
       },
       categorias: categoriasDisponiveis
     };
