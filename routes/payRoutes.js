@@ -65,6 +65,15 @@ router.post("/webhook", async (req, res) => {
 
             try {
                 const paymentDetails = await payment.get({ id: paymentId });
+                
+                // 🚩 TRATAMENTO DE ERRO CRÍTICO (Evita o 500 e a falha de desestruturação)
+                if (!paymentDetails || !paymentDetails.body || !paymentDetails.body.status) {
+                    console.error("❌ Erro de Estrutura: Resposta inesperada da API do Mercado Pago para o ID:", paymentId);
+                    // Retorna 200 OK para o Mercado Pago e evita o reenvio infinito do webhook
+                    return res.status(200).send("Resposta do MP inválida, ignorando."); 
+                }
+                // 🚩 FIM DO TRATAMENTO
+
                 const { status, metadata, additional_info } = paymentDetails.body;
 
                 console.log("Detalhes do pagamento:", paymentDetails.body);
@@ -72,11 +81,13 @@ router.post("/webhook", async (req, res) => {
                 if (status === "approved") {
                     if (!metadata || !metadata.user_id) {
                         console.error("Erro: user_id não encontrado na metadata do webhook.");
-                        return res.status(400).send("Dados do usuário ausentes.");
+                        // Mudamos para 200 OK para evitar reenvios em falhas controladas
+                        return res.status(200).send("Dados do usuário ausentes.");
                     }
                     if (!additional_info || !additional_info.items || additional_info.items.length === 0) {
                         console.error("Erro: Itens da compra não encontrados na additional_info.");
-                        return res.status(400).send("Itens da compra ausentes.");
+                        // Mudamos para 200 OK
+                        return res.status(200).send("Itens da compra ausentes.");
                     }
 
                     const userId = metadata.user_id;
@@ -96,8 +107,10 @@ router.post("/webhook", async (req, res) => {
                 }
                 res.status(200).send("OK");
             } catch (error) {
-                console.error("❌ Erro ao processar o webhook do Mercado Pago:", error);
-                res.status(500).send("Erro interno ao processar o webhook.");
+                console.error("❌ Erro fatal ou de rede ao processar o webhook do Mercado Pago:", error);
+                // 🚨 MUITO IMPORTANTE: Retornar 200 OK no catch evita o loop infinito de reenvio
+                // pelo Mercado Pago (que espera uma resposta 200/201 para confirmar a entrega).
+                res.status(200).send("Erro interno tratado.");
             }
             break;
         }
