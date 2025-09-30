@@ -21,12 +21,6 @@ router.post("/create-preference", async (req, res) => {
         const data = await preference.create({
             body: {
                 items: items,
-                back_urls: {
-                    success: `${process.env.FRONTEND_URL}/meus-ingressos?status=approved`,
-                    pending: `${process.env.FRONTEND_URL}/meus-ingressos?status=pending`,
-                    failure: `${process.env.FRONTEND_URL}/meus-ingressos?status=rejected`,
-                },
-                auto_return: "approved",
                 metadata: {
                     user_id: userId,
                 },
