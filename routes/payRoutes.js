@@ -46,7 +46,6 @@ router.post("/create-preference", async (req, res) => {
 // ---
 
 // Middleware específico para a rota de webhook para processar o corpo raw
-router.use(express.raw({ type: '*/*' }));
 
 // Rota de webhook para SALVAR o ingresso
 router.post("/webhook", async (req, res) => {
