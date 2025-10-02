@@ -104,6 +104,7 @@ app.use('/api/compras', compraRoutes);
 app.use('/api/perfil', perfilRoutes);
 app.use('/api/pagamento', payRoutes);
 app.use('/split-pay', splitPayRoutes);
+app.use('/api/carrinho', require('./routes/carrinhoRoutes'));
 app.use('/api/mercadopago', mercadopagoAuthRoutes);
 
 app.get('/api/eventos/verificar-estoque/:id', (req, res) => {
