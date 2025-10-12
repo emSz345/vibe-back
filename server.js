@@ -78,6 +78,7 @@ const payRoutes = require('./routes/payRoutes'); // Rota de pagamento (inclui l�
 const splitPayRoutes = require('./routes/splitPayRoutes');
 const mercadopagoAuthRoutes = require('./routes/mercadopagoAuthRoutes');
 const carrinhoRoutes = require('./routes/carrinhoRoutes'); // Nova rota do seu amigo
+const ingressoRoutes = require('./routes/ingressoRoutes');
 
 const PORT = process.env.PORT || 5000;
 const front = process.env.FRONTEND_URL;
@@ -131,6 +132,7 @@ app.use('/api/pagamento', payRoutes);
 app.use('/split-pay', splitPayRoutes);
 app.use('/api/mercadopago', mercadopagoAuthRoutes);
 app.use('/api/carrinho', carrinhoRoutes); // Rota de carrinho adicionada
+app.use('/api/ingressos', ingressoRoutes);
 
 // ⚠️ Rota temporária de verificação de estoque (Idealmente, mover para eventRoutes.js)
 app.get('/api/eventos/verificar-estoque/:id', (req, res) => {
