@@ -117,8 +117,101 @@ const enviarEmailIngresso = async (usuario, ingresso) => {
 
 
 // SUAS FUNÇÕES EXISTENTES (SEM MUDANÇAS)
-const enviarEmailRejeicaoEvento = async (usuario, evento, motivo) => { /* ... seu código aqui ... */ };
-const enviarEmailConfirmacaoEvento = async (usuario, evento) => { /* ... seu código aqui ... */ };
+const enviarEmailRejeicaoEvento = async (usuario, evento, motivo) => {
+    if (!usuario || !usuario.email) {
+        console.error('Dados do usuário inválidos para enviar e-mail de rejeição.');
+        return;
+    }
+
+    const emailHtml = `
+    <!DOCTYPE html>
+    <html lang="pt-BR">
+    <head>
+        <meta charset="UTF-8">
+        <style>
+            body { font-family: Arial, sans-serif; margin: 0; padding: 20px; color: #333; background-color: #f4f4f4; }
+            .container { max-width: 600px; margin: auto; background-color: #ffffff; border: 1px solid #ddd; padding: 30px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+            .header { font-size: 24px; font-weight: bold; color: #e74c3c; text-align: center; margin-bottom: 20px; }
+            .content p { line-height: 1.6; font-size: 16px; margin: 10px 0; }
+            .evento-details { background-color: #f9f9f9; border-left: 4px solid #e74c3c; padding: 20px; margin: 20px 0; border-radius: 4px; }
+            .motivo-section { background-color: #fff5f5; border: 1px solid #ffcccc; padding: 15px; margin: 15px 0; border-radius: 4px; }
+            .footer { font-size: 12px; color: #888; text-align: center; margin-top: 30px; }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">Evento Não Aprovado</div>
+            <div class="content">
+                <p>Olá, <strong>${usuario.nome}</strong>!</p>
+                <p>Infelizmente, o evento que você submeteu não pôde ser aprovado no momento.</p>
+                
+                
+                <div class="motivo-section">
+                    <p><strong>Motivo da Rejeição: <br>   ${motivo.titulo}</strong></p>
+                    <p><strong>Descrição Detalhada: <br>  ${motivo.descricao}<strong/></p>
+                </div>
+
+                <p>Você pode revisar os requisitos e submeter novamente através do nosso sistema.</p>
+                <p>Agradecemos sua compreensão.</p>
+            </div>
+            <div class="footer">
+                <p>Equipe VibeTicket Eventos</p>
+            </div>
+        </div>
+    </body>
+    </html>
+    `;
+
+    await enviarEmail({
+        to: usuario.email,
+        subject: `❌ Evento Não Aprovado: ${evento.nome}`,
+        html: emailHtml
+    });
+};
+const enviarEmailConfirmacaoEvento = async (usuario, evento) => {
+    if (!usuario || !usuario.email) {
+        console.error('Dados do usuário inválidos para enviar e-mail de confirmação.');
+        return;
+    }
+
+    const emailHtml = `
+    <!DOCTYPE html>
+    <html lang="pt-BR">
+    <head>
+        <meta charset="UTF-8">
+        <style>
+            body { font-family: Arial, sans-serif; margin: 0; padding: 20px; color: #333; background-color: #f4f4f4; }
+            .container { max-width: 600px; margin: auto; background-color: #ffffff; border: 1px solid #ddd; padding: 30px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+            .header { font-size: 24px; font-weight: bold; color: #27ae60; text-align: center; margin-bottom: 20px; }
+            .content p { line-height: 1.6; font-size: 16px; margin: 10px 0; }
+            .evento-details { background-color: #f9f9f9; border-left: 4px solid #27ae60; padding: 20px; margin: 20px 0; border-radius: 4px; }
+            .footer { font-size: 12px; color: #888; text-align: center; margin-top: 30px; }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">🎉 Evento Aprovado!</div>
+            <div class="content">
+                <p>Olá, <strong>${usuario.nome}</strong>!</p>
+                <p>Seu evento foi aprovado e já está disponível em nossa plataforma.</p>
+                
+                <p>Os usuários já podem visualizar e adquirir ingressos para o seu evento.</p>
+                <p>Parabéns e sucesso no seu evento!</p>
+            </div>
+            <div class="footer">
+                <p>Equipe VibeTicket Eventos</p>
+            </div>
+        </div>
+    </body>
+    </html>
+    `;
+
+    await enviarEmail({
+        to: usuario.email,
+        subject: `✅ Evento Aprovado: ${evento.nome}`,
+        html: emailHtml
+    });
+};
 
 // Exporta todas as funções, incluindo a nova
 module.exports = { 
