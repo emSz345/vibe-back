@@ -7,7 +7,7 @@ const path = require('path');
 const { enviarEmailConfirmacaoEvento, enviarEmailRejeicaoEvento } = require('../utils/emailService');
 
 // IMPORTA O MIDDLEWARE CORRETO QUE LÊ COOKIES
-const authMiddleware = require('../authMiddleware');
+const { protect } = require('../authMiddleware');
 
 // A FUNÇÃO 'authenticateToken' FOI REMOVIDA.
 
@@ -40,10 +40,10 @@ router.get('/aprovados', async (req, res) => {
     if (searchTerm) {
       // Divide o termo de busca em palavras individuais
       const searchWords = searchTerm.split(/\s+/).filter(word => word.length > 0);
-      
+
       // Cria um array de regex para cada palavra
       const searchRegexes = searchWords.map(word => new RegExp(word, 'i'));
-      
+
       // Cria condições de busca para cada campo
       const searchConditions = searchRegexes.map(regex => ({
         $or: [
@@ -65,7 +65,7 @@ router.get('/aprovados', async (req, res) => {
 
     // Adiciona ordenação por relevância e data
     const eventos = await Event.find(query)
-      .sort({ 
+      .sort({
         dataInicio: 1, // Eventos mais próximos primeiro
         createdAt: -1  // Eventos mais recentes
       });
@@ -77,9 +77,9 @@ router.get('/aprovados', async (req, res) => {
 });
 
 // Rota para o usuário ver os próprios eventos
-router.get('/meus-eventos', authMiddleware, async (req, res) => {
+router.get('/meus-eventos', protect, async (req, res) => {
   try {
-    const userId = req.userId; // ID do usuário vindo do cookie/token
+    const userId = req.user.userId; // ID do usuário vindo do cookie/token
     if (!userId) {
       return res.status(400).json({ message: 'ID do usuário não encontrado no token' });
     }
@@ -92,10 +92,10 @@ router.get('/meus-eventos', authMiddleware, async (req, res) => {
 });
 
 // Rota para deletar um evento
-router.delete('/:id', authMiddleware, async (req, res) => {
+router.delete('/:id', protect, async (req, res) => {
   try {
     const { id } = req.params;
-    const userId = req.userId; // ID do usuário vindo do cookie/token
+    const userId = req.user.userId; // ID do usuário vindo do cookie/token
 
     const evento = await Event.findById(id);
     if (!evento) {
@@ -200,14 +200,14 @@ router.get('/publico/:id', async (req, res) => {
   }
 });
 
-router.get('/:id', authMiddleware, async (req, res) => {
+router.get('/:id', protect, async (req, res) => {
   try {
     const evento = await Event.findById(req.params.id).populate('criadoPor', 'nome email imagemPerfil');
     if (!evento) {
       return res.status(404).json({ message: 'Evento não encontrado.' });
     }
 
-    const userId = req.userId; // ID do usuário vindo do cookie/token
+    const userId = req.user.userId; // ID do usuário vindo do cookie/token
     if (evento.criadoPor._id.toString() !== userId) {
       return res.status(403).json({ message: 'Acesso negado - você não é o dono deste evento' });
     }
@@ -247,10 +247,10 @@ router.patch('/atualizar-status/:id', async (req, res) => {
   }
 });
 
-router.put('/:id/editar', authMiddleware, upload.single('imagem'), async (req, res) => {
+router.put('/:id/editar', protect, upload.single('imagem'), async (req, res) => {
   try {
     const eventoId = req.params.id;
-    const userId = req.userId; // ID do usuário vindo do cookie/token
+    const userId = req.user.userId; // ID do usuário vindo do cookie/token
 
     const eventoExistente = await Event.findById(eventoId);
     if (!eventoExistente) {
@@ -304,9 +304,14 @@ router.put('/:id/editar', authMiddleware, upload.single('imagem'), async (req, r
   }
 });
 
-router.post('/criar', authMiddleware, upload.single('imagem'), async (req, res) => {
+router.post('/criar', protect, upload.single('imagem'), async (req, res) => {
   try {
-    const criadoPor = req.userId; // ID do usuário vindo do cookie/token, mais seguro!
+
+    if (req.user.role === 'SUPER_ADMIN' || req.user.role === 'MANAGER_SITE') {
+      return res.status(403).json({ message: 'Administradores não podem adicionar itens ao carrinho.' });
+    }
+    // CORREÇÃO: A variável agora se chama 'criadoPor' para ser consistente.
+    const criadoPor = req.user.userId;
 
     const {
       nome, categoria, descricao, cep, rua, bairro, numero, complemento, cidade,
@@ -319,6 +324,7 @@ router.post('/criar', authMiddleware, upload.single('imagem'), async (req, res) 
       return res.status(400).json({ message: 'A imagem do evento é obrigatória.' });
     }
 
+    // Agora a variável 'criadoPor' existe e pode ser usada aqui.
     const usuario = await User.findById(criadoPor);
     if (!usuario) {
       return res.status(404).json({ message: 'Usuário criador do evento não encontrado.' });
@@ -349,12 +355,12 @@ router.post('/criar', authMiddleware, upload.single('imagem'), async (req, res) 
       temMeia: temMeia,
       querDoar: querDoar === 'true',
       valorDoacao: querDoar === 'true' ? parseFloat(valorDoacao.replace(',', '.')) : 0,
-      criadoPor
+      criadoPor // Esta variável agora existe e está correta.
     });
 
     if (querDoar === 'true' && parseFloat(valorDoacao.replace(',', '.')) > 0) {
       novoEvento.doadores.push({
-        usuarioId: criadoPor,
+        usuarioId: criadoPor, // E aqui também.
         imagemPerfil: usuario.imagemPerfil,
         nome: usuario.nome,
         valorDoacao: parseFloat(valorDoacao.replace(',', '.'))

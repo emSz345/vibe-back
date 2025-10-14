@@ -1,37 +1,57 @@
+// Arquivo: authMiddleware.js
+
 const jwt = require('jsonwebtoken');
 const SECRET = process.env.JWT_SECRET;
 
-const authMiddleware = (req, res, next) => {
-  // 1. Tenta obter o token do cookie chamado 'authToken' (seu método atual)
-  let token = req.cookies.authToken;
+// 1. A função 'protect' (seu middleware antigo, mas melhorado)
+const protect = (req, res, next) => {
+  let token;
 
-  // 2. Se não encontrou no cookie, tenta no header Authorization (para o carrinho)
-  if (!token) {
-    const authHeader = req.headers['authorization'];
-    token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
+  // A sua lógica para encontrar o token no cookie ou no header está perfeita.
+  if (req.cookies.authToken) {
+    token = req.cookies.authToken;
+  } else if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+    token = req.headers.authorization.split(' ')[1];
   }
 
-  // 3. Se não houver token em nenhum lugar, retorna erro
   if (!token) {
     return res.status(401).json({ message: 'Acesso negado. Nenhum token fornecido.' });
   }
 
   try {
-    // 4. Verifica se o token é válido
     const decoded = jwt.verify(token, SECRET);
 
-    // 5. 🔥 CORREÇÃO: Padroniza a estrutura para todas as rotas
-    // Mantém compatibilidade com suas rotas existentes E com o carrinho
-    req.userId = decoded.userId; // Para suas rotas atuais
-    req.user = { userId: decoded.userId }; // Para as rotas do carrinho
+    // 🔥 MUDANÇA PRINCIPAL AQUI:
+    // Em vez de salvar apenas o ID, salvamos o objeto INTEIRO do token ({ userId, role }).
+    // Isso deixa a 'role' disponível para os próximos middlewares.
+    req.user = decoded; 
 
-    
-    next(); // Continua para a próxima função (a rota)
+    next(); // Continua para a próxima função
   } catch (error) {
-    // 6. Se o token for inválido (expirado, etc.), retorna erro
-    console.log('❌ Token inválido:', error.message);
-    res.status(401).json({ message: 'Token inválido.' });
+    res.status(401).json({ message: 'Token inválido ou expirado.' });
   }
 };
 
-module.exports = authMiddleware;
+// 2. A NOVA função 'checkPermission'
+const checkPermission = (allowedRoles) => {
+  // Esta função retorna outra função (um middleware)
+  return (req, res, next) => {
+    // Primeiro, checamos se o middleware 'protect' foi executado e nos deu um usuário
+    if (!req.user || !req.user.role) {
+      return res.status(401).json({ message: 'Não autorizado, informações de usuário ausentes.' });
+    }
+
+    const { role } = req.user; // Pegamos a role que o 'protect' extraiu do token
+
+    // Verificamos se a role do usuário está na lista de roles permitidas para esta rota
+    if (allowedRoles.includes(role)) {
+      next(); // Se estiver, PERMITIDO! Pode continuar.
+    } else {
+      // Se não estiver, PROIBIDO!
+      res.status(403).json({ message: 'Acesso negado. Você não tem permissão para executar esta ação.' });
+    }
+  };
+};
+
+// Exportamos as duas funções para serem usadas em outros arquivos
+module.exports = { protect, checkPermission };

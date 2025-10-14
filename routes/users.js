@@ -9,7 +9,7 @@ const path = require('path');
 const validator = require('validator');
 const { enviarEmail } = require('../utils/emailService');
 const fs = require('fs');
-const authMiddleware = require('../authMiddleware'); // <-- Seu middleware agora corrigido
+const { protect } = require('../authMiddleware'); // <-- Seu middleware agora corrigido
 
 const SECRET = process.env.JWT_SECRET;
 const UPLOAD_DIR = 'uploads/perfil-img';
@@ -60,7 +60,7 @@ router.post('/login', async (req, res) => {
             return res.status(401).json({ message: 'Credenciais inválidas' });
         }
 
-        const token = jwt.sign({ userId: user._id }, SECRET, { expiresIn: '7d' });
+        const token = jwt.sign({ userId: user._id, role: user.role }, SECRET, { expiresIn: '7d' });
 
         const cookieOptions = {
             httpOnly: true,
@@ -80,7 +80,7 @@ router.post('/login', async (req, res) => {
                 _id: user._id,
                 nome: user.nome,
                 email: user.email,
-                isAdmin: user.isAdmin,
+                role: user.role,
                 imagemPerfil: getImagemPerfilPath(user.imagemPerfil)
             },
         });
@@ -105,13 +105,11 @@ router.post('/logout', (req, res) => {
 
 // --- ROTA PARA VERIFICAR SESSÃO ---
 // <-- MELHORIA: Rota crucial para o frontend saber se o usuário está logado ao recarregar a página.
-router.get('/check-auth', authMiddleware, async (req, res) => {
+router.get('/check-auth', protect, async (req, res) => { // <-- MUDANÇA 1: Usar 'protect'
     try {
-        // O authMiddleware já verificou o token. Se chegamos aqui, o usuário está autenticado.
-        // Buscamos os dados mais recentes do usuário para enviar de volta.
-        const user = await User.findById(req.userId).select('-senha');
+        // O req.user é fornecido pelo 'protect' e contém { userId, role }
+        const user = await User.findById(req.user.userId).select('-senha'); // <-- MUDANÇA 2: Usar 'req.user.userId'
         if (!user) {
-            // Limpa o cookie se o usuário não for encontrado no banco por algum motivo
             res.clearCookie('authToken');
             return res.status(404).json({ message: 'Usuário não encontrado.' });
         }
@@ -121,7 +119,7 @@ router.get('/check-auth', authMiddleware, async (req, res) => {
                 _id: user._id,
                 nome: user.nome,
                 email: user.email,
-                isAdmin: user.isAdmin,
+                role: user.role,
                 imagemPerfil: getImagemPerfilPath(user.imagemPerfil)
             }
         });
@@ -134,21 +132,19 @@ router.get('/check-auth', authMiddleware, async (req, res) => {
 
 // --- ROTA GET /me ---
 // <-- CORREÇÃO: Esta rota agora usa apenas o ID do token, é mais segura e simples.
-router.get('/me', authMiddleware, async (req, res) => {
+router.get('/me', protect, async (req, res) => { // <-- MUDANÇA 1: Usar 'protect'
     try {
-        // O req.userId é fornecido pelo authMiddleware, garantindo que o usuário só pode ver seus próprios dados.
-        const user = await User.findById(req.userId).select('-senha');
+        const user = await User.findById(req.user.userId).select('-senha'); // <-- MUDANÇA 2: Usar 'req.user.userId'
         if (!user) {
             return res.status(404).json({ message: 'Usuário não encontrado' });
         }
-
         res.json({
             _id: user._id,
             nome: user.nome,
             email: user.email,
             provedor: user.provedor,
             isVerified: user.isVerified,
-            isAdmin: user.isAdmin,
+            role: user.role,
             imagemPerfil: getImagemPerfilPath(user.imagemPerfil)
         });
     } catch (error) {
@@ -178,7 +174,7 @@ router.post('/social-login', async (req, res) => {
             await user.save();
         }
 
-        const token = jwt.sign({ userId: user._id }, SECRET, { expiresIn: '7d' });
+        const token = jwt.sign({ userId: user._id, role: user.role }, SECRET, { expiresIn: '7d' });
 
         res.cookie('authToken', token, {
             httpOnly: true,
@@ -195,7 +191,7 @@ router.post('/social-login', async (req, res) => {
                 _id: user._id,
                 nome: user.nome,
                 email: user.email,
-                isAdmin: user.isAdmin,
+                role: user.role,
                 imagemPerfil: getImagemPerfilPath(user.imagemPerfil)
             },
         });
@@ -467,34 +463,6 @@ router.put('/updateByEmail/:email', upload.single('imagemPerfil'), async (req, r
     }
 });
 
-router.patch('/promover-admin', async (req, res) => {
-    const { email } = req.body;
-
-    try {
-        // Encontre o usuário pelo e-mail
-        const user = await User.findOne({ email });
-
-        if (!user) {
-            return res.status(404).json({ message: 'Usuário não encontrado.' });
-        }
-
-        // Verifique se o usuário já é um administrador
-        if (user.isAdmin) {
-            return res.status(400).json({ message: 'Este usuário já é um administrador.' });
-        }
-
-        // Atualize o campo isAdmin para true
-        user.isAdmin = true;
-        await user.save(); // Salve a alteração no banco de dados
-
-        // Retorne uma resposta de sucesso
-        res.status(200).json({ message: 'Usuário promovido a administrador com sucesso.' });
-
-    } catch (error) {
-        console.error('Erro ao promover o usuário:', error);
-        res.status(500).json({ message: 'Erro interno do servidor.' });
-    }
-});
 
 router.get('/:userId', async (req, res) => {
     try {

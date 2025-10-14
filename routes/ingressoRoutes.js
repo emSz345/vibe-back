@@ -1,17 +1,23 @@
-// vibe-back/routes/ingressoRoutes.js (NOVO ARQUIVO)
+// vibe-back/routes/ingressoRoutes.js
 
 const express = require('express');
 const router = express.Router();
-const authMiddleware = require('../authMiddleware');
-const Ingresso = require('../models/ingresso'); // Ajuste o caminho se necessário
-const User = require('../models/User'); // Ajuste o caminho se necessário
+// CORREÇÃO 1: Importar usando desestruturação { }
+const { protect } = require('../authMiddleware');
+const Ingresso = require('../models/ingresso');
+const User = require('../models/User');
 const { enviarEmailIngresso } = require('../utils/emailService');
 
 // ROTA: POST /api/ingressos/send-email
-// DESC: Envia os detalhes de um ingresso específico para o e-mail do usuário logado.
-router.post('/send-email', authMiddleware, async (req, res) => {
+router.post('/send-email', protect, async (req, res) => {
+
+    if (req.user.role === 'SUPER_ADMIN' || req.user.role === 'MANAGER_SITE') {
+        return res.status(403).json({ message: 'Administradores não podem adicionar itens ao carrinho.' });
+    }
+
     const { ingressoId } = req.body;
-    const { userId } = req.user;
+    // CORREÇÃO 2: Acessar a propriedade 'userId' dentro do objeto 'req.user'
+    const userId = req.user.userId;
 
     if (!ingressoId) {
         return res.status(400).json({ message: 'O ID do ingresso é obrigatório.' });

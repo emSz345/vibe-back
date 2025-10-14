@@ -2,10 +2,10 @@ const express = require('express');
 const router = express.Router();
 const Carrinho = require('../models/Carrinho');
 const Event = require('../models/Event');
-const authenticateToken = require('../authMiddleware');
+const { protect } = require('../authMiddleware');
 
 // 🔥 OBTER CARRINHO DO USUÁRIO
-router.get('/', authenticateToken, async (req, res) => {
+router.get('/', protect, async (req, res) => {
     try {
         let carrinho = await Carrinho.findOne({ usuarioId: req.user.userId })
             .populate('itens.eventoId', 'nome imagem quantidadeInteira quantidadeMeia');
@@ -27,8 +27,12 @@ router.get('/', authenticateToken, async (req, res) => {
 });
 
 // 🔥 ADICIONAR ITEM AO CARRINHO (Corrigido com validação e Upsert)
-router.post('/itens', authenticateToken, async (req, res) => {
+router.post('/itens', protect, async (req, res) => {
     try {
+        if (req.user.role === 'SUPER_ADMIN' || req.user.role === 'MANAGER_SITE') {
+            return res.status(403).json({ message: 'Administradores não podem adicionar itens ao carrinho.' });
+        }
+
         const { eventoId, tipoIngresso, quantidade } = req.body;
         const userId = req.user.userId;
 
@@ -56,7 +60,7 @@ router.post('/itens', authenticateToken, async (req, res) => {
                 message: `Estoque insuficiente. Quantidade desejada: ${quantidadeTotalAposAdicao}. Disponível: ${estoqueDisponivel}`
             });
         }
-        
+
         // 2. Tenta encontrar o item e ATUALIZAR (incrementar a quantidade)
         let carrinho = await Carrinho.findOneAndUpdate(
             {
@@ -110,7 +114,7 @@ router.post('/itens', authenticateToken, async (req, res) => {
 });
 
 // 🔥 ATUALIZAR QUANTIDADE
-router.put('/itens/:itemId', authenticateToken, async (req, res) => {
+router.put('/itens/:itemId', protect, async (req, res) => {
     try {
         const { quantidade } = req.body;
         const userId = req.user.userId;
@@ -156,7 +160,7 @@ router.put('/itens/:itemId', authenticateToken, async (req, res) => {
 });
 
 // 🔥 REMOVER ITEM
-router.delete('/itens/:itemId', authenticateToken, async (req, res) => {
+router.delete('/itens/:itemId', protect, async (req, res) => {
     try {
         const carrinho = await Carrinho.findOne({ usuarioId: req.user.userId });
         if (!carrinho) {
@@ -175,7 +179,7 @@ router.delete('/itens/:itemId', authenticateToken, async (req, res) => {
 });
 
 // 🔥 LIMPAR CARRINHO
-router.delete('/', authenticateToken, async (req, res) => {
+router.delete('/', protect, async (req, res) => {
     try {
         // Deleta o documento inteiro do carrinho
         await Carrinho.findOneAndDelete({ usuarioId: req.user.userId });

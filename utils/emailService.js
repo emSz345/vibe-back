@@ -140,7 +140,7 @@ const enviarEmailRejeicaoEvento = async (usuario, evento, motivo) => {
     </head>
     <body>
         <div class="container">
-            <div class="header">Evento Não Aprovado</div>
+            <div class="header">Evento Rejeitado</div>
             <div class="content">
                 <p>Olá, <strong>${usuario.nome}</strong>!</p>
                 <p>Infelizmente, o evento que você submeteu não pôde ser aprovado no momento.</p>
