@@ -17,7 +17,7 @@ const PerfilSchema = new mongoose.Schema({
     // Campos separados para CPF e CNPJ
     cpf: { type: String, required: false },
     cnpj: { type: String, required: false },
-    
+
     dataNascimento: { type: Date, required: false },
     telefone: { type: String, required: false },
     nomeCompleto: { type: String, required: false }
@@ -28,6 +28,11 @@ const PerfilSchema = new mongoose.Schema({
     nomeFantasia: { type: String, required: false },
     inscricaoMunicipal: { type: String, required: false },
     cpfSocio: { type: String, required: false }
+  },
+
+  mercadoPagoAccountId: {
+    type: String,
+    required: false // É opcional, pois nem todo usuário será um criador de eventos
   }
 }, { timestamps: true });
 

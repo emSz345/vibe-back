@@ -5,6 +5,7 @@ const User = require('../models/User');
 const multer = require('multer');
 const path = require('path');
 const { enviarEmailConfirmacaoEvento, enviarEmailRejeicaoEvento } = require('../utils/emailService');
+const Perfil = require('../models/Perfil');
 
 // IMPORTA O MIDDLEWARE CORRETO QUE LÊ COOKIES
 const { protect } = require('../authMiddleware');
@@ -306,13 +307,25 @@ router.put('/:id/editar', protect, upload.single('imagem'), async (req, res) => 
 
 router.post('/criar', protect, upload.single('imagem'), async (req, res) => {
   try {
-
+    // Verificação 1: Garante que administradores não podem criar eventos
     if (req.user.role === 'SUPER_ADMIN' || req.user.role === 'MANAGER_SITE') {
-      return res.status(403).json({ message: 'Administradores não podem adicionar itens ao carrinho.' });
+      return res.status(403).json({ message: 'Administradores não podem criar eventos.' });
     }
-    // CORREÇÃO: A variável agora se chama 'criadoPor' para ser consistente.
+
     const criadoPor = req.user.userId;
 
+    // 🔥 VERIFICAÇÃO 2: Trava de segurança para a conta do Mercado Pago
+    // Busca o perfil do usuário que está tentando criar o evento
+    const perfilUsuario = await Perfil.findOne({ userId: criadoPor });
+
+    // Se não houver perfil ou se o ID da conta do MP não estiver salvo, bloqueia a ação.
+    if (!perfilUsuario || !perfilUsuario.mercadoPagoAccountId) {
+      return res.status(403).json({
+        message: 'Ação bloqueada. É necessário vincular sua conta do Mercado Pago em "Meu Perfil" antes de criar um evento.'
+      });
+    }
+
+    // Se passou na verificação, o resto da lógica continua normalmente...
     const {
       nome, categoria, descricao, cep, rua, bairro, numero, complemento, cidade,
       estado, linkMaps, dataInicio, horaInicio, horaTermino, dataFimVendas,
@@ -324,7 +337,6 @@ router.post('/criar', protect, upload.single('imagem'), async (req, res) => {
       return res.status(400).json({ message: 'A imagem do evento é obrigatória.' });
     }
 
-    // Agora a variável 'criadoPor' existe e pode ser usada aqui.
     const usuario = await User.findById(criadoPor);
     if (!usuario) {
       return res.status(404).json({ message: 'Usuário criador do evento não encontrado.' });
@@ -355,12 +367,12 @@ router.post('/criar', protect, upload.single('imagem'), async (req, res) => {
       temMeia: temMeia,
       querDoar: querDoar === 'true',
       valorDoacao: querDoar === 'true' ? parseFloat(valorDoacao.replace(',', '.')) : 0,
-      criadoPor // Esta variável agora existe e está correta.
+      criadoPor
     });
 
     if (querDoar === 'true' && parseFloat(valorDoacao.replace(',', '.')) > 0) {
       novoEvento.doadores.push({
-        usuarioId: criadoPor, // E aqui também.
+        usuarioId: criadoPor,
         imagemPerfil: usuario.imagemPerfil,
         nome: usuario.nome,
         valorDoacao: parseFloat(valorDoacao.replace(',', '.'))

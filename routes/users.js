@@ -1,7 +1,7 @@
-// Arquivo: routes/users.js
 const express = require('express');
 const router = express.Router();
 const User = require('../models/User');
+const Perfil = require('../models/Perfil'); // 🔥 Importe o modelo Perfil
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const multer = require('multer');
@@ -9,14 +9,11 @@ const path = require('path');
 const validator = require('validator');
 const { enviarEmail } = require('../utils/emailService');
 const fs = require('fs');
-const { protect } = require('../authMiddleware'); // <-- Seu middleware agora corrigido
+const { protect } = require('../authMiddleware');
 
 const SECRET = process.env.JWT_SECRET;
 const UPLOAD_DIR = 'uploads/perfil-img';
 const DEFAULT_AVATAR_FILENAME = 'blank_profile.png';
-
-// ... (toda a sua configuração do Multer e a função getImagemPerfilPath permanecem iguais) ...
-// (O código foi omitido para focar nas correções, mas ele deve continuar aqui)
 
 const storage = multer.diskStorage({
     destination: function (req, file, cb) {
@@ -28,20 +25,15 @@ const storage = multer.diskStorage({
     }
 });
 const upload = multer({ storage });
+
 const getImagemPerfilPath = (filename) => {
     if (!filename) return `/uploads/${DEFAULT_AVATAR_FILENAME}`;
-    if (filename.startsWith('http')) {
-        return filename;
-    }
-    if (filename === DEFAULT_AVATAR_FILENAME) {
-        return `/uploads/${DEFAULT_AVATAR_FILENAME}`;
-    }
+    if (filename.startsWith('http')) return filename;
+    if (filename === DEFAULT_AVATAR_FILENAME) return `/uploads/${DEFAULT_AVATAR_FILENAME}`;
     return `/${UPLOAD_DIR}/${filename}`;
 };
 
-
-// --- ROTA DE LOGIN ---
-// O seu código aqui já estava correto! Mantive como está.
+// --- ROTA DE LOGIN (CORRIGIDA) ---
 router.post('/login', async (req, res) => {
     const { email, senha } = req.body;
 
@@ -60,6 +52,18 @@ router.post('/login', async (req, res) => {
             return res.status(401).json({ message: 'Credenciais inválidas' });
         }
 
+        // 🔥 LÓGICA DE ENRIQUECIMENTO: Busca o perfil para obter o ID do MP
+        const perfil = await Perfil.findOne({ userId: user._id });
+
+        const userDataForResponse = {
+            _id: user._id,
+            nome: user.nome,
+            email: user.email,
+            role: user.role,
+            imagemPerfil: getImagemPerfilPath(user.imagemPerfil),
+            mercadoPagoAccountId: perfil ? perfil.mercadoPagoAccountId : null
+        };
+
         const token = jwt.sign({ userId: user._id, role: user.role }, SECRET, { expiresIn: '7d' });
 
         const cookieOptions = {
@@ -69,20 +73,12 @@ router.post('/login', async (req, res) => {
             sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
         };
 
-        // Seu código já salva o token no cookie. Vamos mantê-lo.
         res.cookie('authToken', token, cookieOptions);
 
-        // CORREÇÃO: Envie o token também no corpo da resposta JSON.
         res.status(200).json({
             message: 'Login realizado com sucesso',
-            token: token, // <--- ADICIONE ESTA LINHA
-            user: {
-                _id: user._id,
-                nome: user.nome,
-                email: user.email,
-                role: user.role,
-                imagemPerfil: getImagemPerfilPath(user.imagemPerfil)
-            },
+            token: token,
+            user: userDataForResponse,
         });
     } catch (err) {
         console.error("Erro no login:", err);
@@ -90,9 +86,7 @@ router.post('/login', async (req, res) => {
     }
 });
 
-
 // --- ROTA DE LOGOUT ---
-// O seu código aqui já estava correto!
 router.post('/logout', (req, res) => {
     res.clearCookie('authToken', {
         httpOnly: true,
@@ -102,26 +96,30 @@ router.post('/logout', (req, res) => {
     res.status(200).json({ message: 'Logout realizado com sucesso' });
 });
 
-
-// --- ROTA PARA VERIFICAR SESSÃO ---
-// <-- MELHORIA: Rota crucial para o frontend saber se o usuário está logado ao recarregar a página.
-router.get('/check-auth', protect, async (req, res) => { // <-- MUDANÇA 1: Usar 'protect'
+// --- ROTA PARA VERIFICAR SESSÃO (CORRIGIDA) ---
+router.get('/check-auth', protect, async (req, res) => {
     try {
-        // O req.user é fornecido pelo 'protect' e contém { userId, role }
-        const user = await User.findById(req.user.userId).select('-senha'); // <-- MUDANÇA 2: Usar 'req.user.userId'
+        const user = await User.findById(req.user.userId).select('-senha');
         if (!user) {
             res.clearCookie('authToken');
             return res.status(404).json({ message: 'Usuário não encontrado.' });
         }
+
+        // 🔥 LÓGICA DE ENRIQUECIMENTO: Também busca o perfil aqui
+        const perfil = await Perfil.findOne({ userId: user._id });
+
+        const userDataForResponse = {
+            _id: user._id,
+            nome: user.nome,
+            email: user.email,
+            role: user.role,
+            imagemPerfil: getImagemPerfilPath(user.imagemPerfil),
+            mercadoPagoAccountId: perfil ? perfil.mercadoPagoAccountId : null
+        };
+
         res.status(200).json({
             message: 'Sessão válida.',
-            user: {
-                _id: user._id,
-                nome: user.nome,
-                email: user.email,
-                role: user.role,
-                imagemPerfil: getImagemPerfilPath(user.imagemPerfil)
-            }
+            user: userDataForResponse
         });
     } catch (error) {
         console.error("Erro ao verificar autenticação:", error);
@@ -129,15 +127,17 @@ router.get('/check-auth', protect, async (req, res) => { // <-- MUDANÇA 1: Usar
     }
 });
 
-
-// --- ROTA GET /me ---
-// <-- CORREÇÃO: Esta rota agora usa apenas o ID do token, é mais segura e simples.
-router.get('/me', protect, async (req, res) => { // <-- MUDANÇA 1: Usar 'protect'
+// --- ROTA GET /me (CORRIGIDA) ---
+router.get('/me', protect, async (req, res) => {
     try {
-        const user = await User.findById(req.user.userId).select('-senha'); // <-- MUDANÇA 2: Usar 'req.user.userId'
+        const user = await User.findById(req.user.userId).select('-senha');
         if (!user) {
             return res.status(404).json({ message: 'Usuário não encontrado' });
         }
+
+        // 🔥 LÓGICA DE ENRIQUECIMENTO: Também busca o perfil aqui
+        const perfil = await Perfil.findOne({ userId: user._id });
+
         res.json({
             _id: user._id,
             nome: user.nome,
@@ -145,7 +145,8 @@ router.get('/me', protect, async (req, res) => { // <-- MUDANÇA 1: Usar 'protec
             provedor: user.provedor,
             isVerified: user.isVerified,
             role: user.role,
-            imagemPerfil: getImagemPerfilPath(user.imagemPerfil)
+            imagemPerfil: getImagemPerfilPath(user.imagemPerfil),
+            mercadoPagoAccountId: perfil ? perfil.mercadoPagoAccountId : null
         });
     } catch (error) {
         console.error("Erro ao buscar usuário em /me:", error);
@@ -153,10 +154,7 @@ router.get('/me', protect, async (req, res) => { // <-- MUDANÇA 1: Usar 'protec
     }
 });
 
-
-// --- ROTA SOCIAL LOGIN ---
-// <-- CORREÇÃO: Apliquei a mesma lógica de cookie aqui
-// Adicione esta rota no seu users.js (backend)
+// --- ROTA SOCIAL LOGIN (CORRIGIDA) ---
 router.post('/social-login', async (req, res) => {
     const { provider, userData } = req.body;
 
@@ -174,6 +172,18 @@ router.post('/social-login', async (req, res) => {
             await user.save();
         }
 
+        // 🔥 LÓGICA DE ENRIQUECIMENTO: Também busca o perfil aqui
+        const perfil = await Perfil.findOne({ userId: user._id });
+
+        const userDataForResponse = {
+            _id: user._id,
+            nome: user.nome,
+            email: user.email,
+            role: user.role,
+            imagemPerfil: getImagemPerfilPath(user.imagemPerfil),
+            mercadoPagoAccountId: perfil ? perfil.mercadoPagoAccountId : null
+        };
+
         const token = jwt.sign({ userId: user._id, role: user.role }, SECRET, { expiresIn: '7d' });
 
         res.cookie('authToken', token, {
@@ -183,17 +193,10 @@ router.post('/social-login', async (req, res) => {
             maxAge: 7 * 24 * 60 * 60 * 1000,
         });
 
-        // CORREÇÃO: Enviar o token também no corpo da resposta
         res.status(200).json({
             message: 'Login social realizado com sucesso',
-            token: token, // ← IMPORTANTE: Enviar o token na resposta
-            user: {
-                _id: user._id,
-                nome: user.nome,
-                email: user.email,
-                role: user.role,
-                imagemPerfil: getImagemPerfilPath(user.imagemPerfil)
-            },
+            token: token,
+            user: userDataForResponse,
         });
     } catch (err) {
         console.error("Erro no login social:", err);
