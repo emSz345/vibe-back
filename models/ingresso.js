@@ -6,27 +6,27 @@ const ingressoSchema = new mongoose.Schema({
         ref: 'User',
         required: true
     },
-    paymentId: {
+    // ID do Pedido (agrupa a transação)
+    pedidoId: {
         type: String,
         required: true,
+        index: true
     },
+    // ID do Pagamento (vem do webhook, por isso não é obrigatório)
+    paymentId: {
+        type: String,
+        required: false, // <-- Confirme que está 'false'
+        unique: true,    // <-- ADICIONE ISSO
+        sparse: true     // <-- ADICIONE ISSO (O MAIS IMPORTANTE)
+    },
+    // Link para o evento
     eventoId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Event',
         required: true
     },
-    nomeEvento: {
-        type: String,
-        required: true
-    },
-    dataEvento: {
-        type: String,
-        required: true
-    },
-    localEvento: {
-        type: String,
-        required: true
-    },
+    // CAMPOS REDUNDANTES REMOVIDOS (nomeEvento, dataEvento, localEvento)
+    // Use .populate('eventoId') para buscar esses dados.
     tipoIngresso: {
         type: String,
         enum: ['Inteira', 'Meia'],
@@ -39,13 +39,13 @@ const ingressoSchema = new mongoose.Schema({
     status: {
         type: String,
         required: true,
-        enum: ['Pago', 'Pendente', 'Cancelado'],
+        enum: ['Pago', 'Pendente', 'Cancelado', 'Recusado'], // <-- 'Recusado' adicionado
         default: 'Pendente'
     },
 }, { timestamps: true });
 
-// Índice composto para evitar duplicação (boa prática)
-ingressoSchema.index({ paymentId: 1, userId: 1, eventoId: 1 });
+// Índice composto (bom para garantir que um ingresso não seja duplicado por engano)
+ingressoSchema.index({ pedidoId: 1, eventoId: 1, userId: 1 });
 
 const Ingresso = mongoose.models.Ingresso || mongoose.model('Ingresso', ingressoSchema);
 
