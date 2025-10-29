@@ -2,9 +2,10 @@ const express = require('express');
 const router = express.Router();
 const Event = require('../models/Event');
 const User = require('../models/User');
+const Ingresso = require('../models/ingresso');
 const multer = require('multer');
 const path = require('path');
-const { enviarEmailConfirmacaoEvento, enviarEmailRejeicaoEvento } = require('../utils/emailService');
+const { enviarEmailConfirmacaoEvento, enviarEmailRejeicaoEvento, enviarEmailAprovacaoEvento } = require('../utils/emailService');
 const Perfil = require('../models/Perfil');
 
 // IMPORTA O MIDDLEWARE CORRETO QUE LÊ COOKIES
@@ -31,49 +32,84 @@ router.get('/estados', async (req, res) => {
     res.status(500).json({ message: 'Erro ao buscar lista de estados.' });
   }
 });
+// segurança 
+
+// Função para escapar caracteres especiais de RegExp
+function escapeRegex(text) {
+  if (typeof text !== 'string') {
+    return '';
+  }
+  // Escapa caracteres que têm significado especial em expressões regulares
+  return text.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
+}
 
 // 2. ROTA '/aprovados' MODIFICADA para aceitar um filtro de estado
 router.get('/aprovados', async (req, res) => {
   try {
     const query = { status: 'aprovado' };
     const searchTerm = req.query.search?.trim();
+    const estadoTerm = req.query.estado?.trim();
 
+    // --- CAMADA 1: VALIDAÇÃO DE TAMANHO ---
+    // Proteção direta contra o erro de "dump de memória".
+    // Rejeita qualquer termo de busca que seja excessivamente longo.
+    const MAX_QUERY_LENGTH = 200; // Limite de 200 caracteres (ajuste se necessário)
+
+    if (searchTerm && searchTerm.length > MAX_QUERY_LENGTH) {
+      return res.status(400).json({ message: 'O termo de busca é muito longo.' });
+    }
+    if (estadoTerm && estadoTerm.length > MAX_QUERY_LENGTH) {
+      return res.status(400).json({ message: 'O termo de estado é muito longo.' });
+    }
+
+    // --- LÓGICA DE BUSCA COM PROTEÇÃO ---
     if (searchTerm) {
-      // Divide o termo de busca em palavras individuais
       const searchWords = searchTerm.split(/\s+/).filter(word => word.length > 0);
 
-      // Cria um array de regex para cada palavra
-      const searchRegexes = searchWords.map(word => new RegExp(word, 'i'));
+      const searchConditions = searchWords.map(word => {
+        // --- CAMADA 2: SANITIZAÇÃO DA REGEXP ---
+        // Escapa o input do usuário ANTES de criar a RegExp.
+        const sanitizedWord = escapeRegex(word);
+        const regex = new RegExp(sanitizedWord, 'i'); // 'i' para case-insensitive
 
-      // Cria condições de busca para cada campo
-      const searchConditions = searchRegexes.map(regex => ({
-        $or: [
-          { nome: { $regex: regex } },
-          { cidade: { $regex: regex } },
-          { estado: { $regex: regex } },
-          { descricao: { $regex: regex } },
-          { categoria: { $regex: regex } }
-        ]
-      }));
+        return {
+          $or: [
+            { nome: { $regex: regex } },
+            { cidade: { $regex: regex } },
+            { estado: { $regex: regex } },
+            { descricao: { $regex: regex } },
+            { categoria: { $regex: regex } }
+          ]
+        };
+      });
 
-      // Adiciona todas as condições com operador $and
-      query.$and = searchConditions;
+      // Combina as condições: o evento deve conter TODAS as palavras buscadas
+      if (searchConditions.length > 0) {
+        query.$and = searchConditions;
+      }
     }
 
-    if (req.query.estado) {
-      query.estado = new RegExp(req.query.estado, 'i');
+    if (estadoTerm) {
+      // Aplica a mesma sanitização para o filtro de estado
+      const sanitizedEstado = escapeRegex(estadoTerm);
+      query.estado = new RegExp(sanitizedEstado, 'i');
     }
 
-    // Adiciona ordenação por relevância e data
     const eventos = await Event.find(query)
+      .populate('criadoPor', 'nome cpf email') // 🔥 ADICIONADO: Popula 'criadoPor' selecionando apenas nome, cpf e email
       .sort({
-        dataInicio: 1, // Eventos mais próximos primeiro
-        createdAt: -1  // Eventos mais recentes
+        dataInicio: 1,
+        createdAt: -1
       });
 
     res.status(200).json(eventos);
+
   } catch (error) {
-    res.status(500).json({ message: 'Erro ao buscar eventos aprovados', error: error.message });
+    // Loga o erro real no console para depuração
+    console.error('Erro na rota /aprovados:', error);
+
+    // Envia uma resposta genérica para o cliente
+    res.status(500).json({ message: 'Ocorreu um erro interno ao buscar os eventos.' });
   }
 });
 
@@ -107,8 +143,36 @@ router.delete('/:id', protect, async (req, res) => {
       return res.status(403).json({ message: 'Acesso negado - você não é o dono deste evento' });
     }
 
+    // ==========================================================
+    // 🔥 INÍCIO DA NOVA VERIFICAÇÃO DE INGRESSOS
+    // ==========================================================
+
+    // 1. Procura se existe PELO MENOS UM ingresso 'Pago' para este evento
+    const ingressoVendido = await Ingresso.findOne({
+      eventoId: id,
+      status: 'Pago'
+    });
+
+    // 2. Se encontrar um, bloqueia a exclusão
+    if (ingressoVendido) {
+      return res.status(400).json({
+        message: 'Este evento não pode ser excluído, pois já possui ingressos vendidos.'
+      });
+    }
+
+    // 3. (Opcional, mas recomendado) Se não há ingressos PAGOS,
+    //    limpa os ingressos 'Pendentes', 'Recusados', etc., do banco.
+    await Ingresso.deleteMany({ eventoId: id });
+
+    // ==========================================================
+    // 🔥 FIM DA NOVA VERIFICAÇÃO
+    // ==========================================================
+
+    // 4. Agora, deleta o evento com segurança
     await Event.findByIdAndDelete(id);
+
     res.status(200).json({ message: 'Evento deletado com sucesso' });
+
   } catch (error) {
     console.error('Erro ao deletar evento:', error);
     res.status(500).json({ message: 'Erro ao deletar evento', error: error.message });
@@ -130,9 +194,63 @@ router.get('/aprovados-carrossel', async (req, res) => {
 router.get('/listar/:status', async (req, res) => {
   try {
     const statusDesejado = req.params.status;
-    const eventos = await Event.find({ status: statusDesejado });
-    res.status(200).json(eventos);
+
+    // 1. Busca eventos e popula o básico do criador (nome, email)
+    // Usamos .lean() para obter objetos JS puros, facilitando a modificação
+    const eventos = await Event.find({ status: statusDesejado })
+      .populate('criadoPor', 'nome email') // Popula SÓ nome e email do User
+      .sort({ createdAt: -1 })
+      .lean();
+
+    // Se não encontrou eventos, retorna array vazio
+    if (!eventos || eventos.length === 0) {
+      return res.status(200).json([]);
+    }
+
+    // 2. Coleta os IDs únicos dos criadores dos eventos encontrados
+    // Usamos ?. para segurança caso criadoPor seja null/undefined por algum erro
+    const criadorIds = [...new Set(eventos.map(e => e.criadoPor?._id).filter(id => id))];
+
+    // Se não houver IDs de criadores (improvável, mas seguro verificar)
+    if (criadorIds.length === 0) {
+      return res.status(200).json(eventos); // Retorna eventos sem dados do perfil
+    }
+
+    // 3. Busca os Perfis correspondentes a esses IDs de usuário
+    const perfis = await Perfil.find({ userId: { $in: criadorIds } })
+      .select('userId dadosPessoais.cpf dadosPessoais.cnpj tipoPessoa') // Seleciona só o que precisamos do Perfil
+      .lean();
+
+    // 4. Cria um mapa (dicionário) para acesso rápido aos dados do perfil pelo userId
+    // Chave: ID do usuário (string), Valor: objeto do perfil encontrado
+    const perfilMap = new Map();
+    perfis.forEach(p => perfilMap.set(p.userId.toString(), p));
+
+    // 5. Junta os dados do perfil aos dados do evento
+    // Itera sobre cada evento encontrado
+    const eventosComDadosCriador = eventos.map(evento => {
+      // Verifica se o evento tem um criador e se o ID existe
+      if (evento.criadoPor && evento.criadoPor._id) {
+        // Busca o perfil correspondente no mapa que criamos
+        const perfilCriador = perfilMap.get(evento.criadoPor._id.toString());
+
+        // Se encontrou um perfil para este criador...
+        if (perfilCriador) {
+          // Adiciona os campos do perfil diretamente ao objeto 'criadoPor' do evento
+          evento.criadoPor.cpf = perfilCriador.dadosPessoais?.cpf;
+          evento.criadoPor.cnpj = perfilCriador.dadosPessoais?.cnpj;
+          evento.criadoPor.tipoPessoa = perfilCriador.tipoPessoa;
+        }
+      }
+      // Retorna o objeto do evento modificado (ou original se não achou perfil)
+      return evento;
+    });
+
+    // 6. Envia a lista de eventos com os dados do criador mesclados
+    res.status(200).json(eventosComDadosCriador);
+
   } catch (error) {
+    console.error(`Erro ao buscar eventos com status '${req.params.status}':`, error);
     res.status(500).json({ message: 'Erro ao buscar eventos por status', error: error.message });
   }
 });
@@ -224,24 +342,49 @@ router.patch('/atualizar-status/:id', async (req, res) => {
     const { id } = req.params;
     const { status, motivo } = req.body;
 
+    // 1. Busca o evento E o criador (seu populate está perfeito)
     const evento = await Event.findById(id).populate('criadoPor');
     if (!evento) {
       return res.status(404).json({ message: 'Evento não encontrado.' });
     }
 
+    // 2. 🔥 Captura o status antigo ANTES de salvar
+    const statusAntigo = evento.status;
+
+    // 3. Atualiza e salva o evento
     evento.status = status;
     await evento.save();
 
-    if (status === 'rejeitado' && motivo && motivo.titulo && motivo.descricao) {
-      if (!evento.criadoPor) {
-        console.warn('Evento não tem criador associado, pulando envio de email:', evento._id);
-        return res.status(200).json(evento);
-      }
+    // 4. Verifica se o criador existe
+    if (!evento.criadoPor) {
+      console.warn('Evento não tem criador associado, pulando envio de email:', evento._id);
+      return res.status(200).json(evento); // Sucesso, mas sem e-mail
+    }
+
+    // 5. 🔥 LÓGICA DE E-MAIL ATUALIZADA
+
+    // Envia e-mail de REJEIÇÃO (se o status mudou para 'rejeitado')
+    if (status === 'rejeitado' && statusAntigo !== 'rejeitado' && motivo && motivo.titulo && motivo.descricao) {
+
       await enviarEmailRejeicaoEvento(evento.criadoPor, evento, motivo).catch(emailError => {
         console.error("Erro ao enviar email de rejeição:", emailError);
+        // Não impede a resposta de sucesso se o e-mail falhar
       });
+
     }
+    // 🔥 BLOCO ADICIONADO: Envia e-mail de APROVAÇÃO (se o status mudou para 'aprovado')
+    else if (status === 'aprovado' && statusAntigo !== 'aprovado') {
+
+      await enviarEmailAprovacaoEvento(evento.criadoPor, evento).catch(emailError => {
+        console.error("Erro ao enviar email de aprovação:", emailError);
+        // Não impede a resposta de sucesso se o e-mail falhar
+      });
+
+    }
+
+    // 6. Responde com sucesso
     res.status(200).json(evento);
+
   } catch (error) {
     console.error('Erro detalhado:', error);
     res.status(500).json({ message: 'Erro ao atualizar o status do evento', error: error.message });

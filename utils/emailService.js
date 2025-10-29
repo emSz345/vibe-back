@@ -1,7 +1,7 @@
-// vibe-back/utils/emailService.js (ARQUIVO ATUALIZADO E COMPLETO)
+// vibe-back/utils/emailService.js (ARQUIVO CORRIGIDO)
 
 const nodemailer = require('nodemailer');
-const qrcode = require('qrcode'); // 🔥 NOVO: Importa a biblioteca de QR Code
+const qrcode = require('qrcode');
 require('dotenv').config();
 
 const transporter = nodemailer.createTransport({
@@ -19,7 +19,7 @@ const transporter = nodemailer.createTransport({
  * Função genérica para enviar e-mails, agora com suporte a anexos.
  * @param {object} mailOptions - Opções do e-mail.
  */
-const enviarEmail = async ({ to, subject, html, attachments }) => { // 🔥 ATUALIZADO: Aceita 'attachments'
+const enviarEmail = async ({ to, subject, html, attachments }) => {
     try {
         await transporter.sendMail({
             from: {
@@ -29,7 +29,7 @@ const enviarEmail = async ({ to, subject, html, attachments }) => { // 🔥 ATUA
             to,
             subject,
             html,
-            attachments // 🔥 ATUALIZADO: Passa os anexos para o sendMail
+            attachments
         });
         console.log(`E-mail enviado com sucesso para ${to}`);
     } catch (error) {
@@ -38,25 +38,21 @@ const enviarEmail = async ({ to, subject, html, attachments }) => { // 🔥 ATUA
 };
 
 /**
- * 🔥 NOVO: Envia o e-mail do ingresso com QR Code em anexo.
+ * Envia o e-mail do ingresso com QR Code em anexo.
+ * (Sua função original, sem alterações)
  * @param {object} usuario - O objeto do usuário (comprador).
  * @param {object} ingresso - O objeto do ingresso.
  */
 const enviarEmailIngresso = async (usuario, ingresso) => {
+    // ... (Seu código original do email de ingresso - está correto)
     if (!usuario || !usuario.email) {
         console.error('Dados do usuário inválidos para enviar e-mail de ingresso.');
         return;
     }
-
-    // 1. Gera o QR Code como uma imagem Data URL (Base64)
     const qrCodeDataUrl = await qrcode.toDataURL(ingresso._id.toString());
-
-    // 2. Formata as datas e informações
     const dataFormatada = new Date(ingresso.dataEvento).toLocaleDateString('pt-BR', {
         day: '2-digit', month: 'long', year: 'numeric'
     });
-
-    // 3. Cria o template HTML do e-mail
     const emailHtml = `
     <!DOCTYPE html>
     <html lang="pt-BR">
@@ -101,28 +97,32 @@ const enviarEmailIngresso = async (usuario, ingresso) => {
     </body>
     </html>
     `;
-
-    // 4. Envia o e-mail usando a função genérica, agora com o anexo
     await enviarEmail({
         to: usuario.email,
         subject: `🎟️ Seu Ingresso para: ${ingresso.nomeEvento}`,
         html: emailHtml,
         attachments: [{
             filename: 'qrcode.png',
-            path: qrCodeDataUrl, // Usa a imagem Base64 gerada
-            cid: 'qrcode_vibeticket' // ID de conteúdo, usado no <img src="cid:...">
+            path: qrCodeDataUrl,
+            cid: 'qrcode_vibeticket'
         }]
     });
 };
 
 
-// SUAS FUNÇÕES EXISTENTES (SEM MUDANÇAS)
+/**
+ * Envia e-mail de REJEIÇÃO do evento.
+ * (Sua função original, sem alterações)
+ * @param {object} usuario 
+ * @param {object} evento 
+ * @param {object} motivo 
+ */
 const enviarEmailRejeicaoEvento = async (usuario, evento, motivo) => {
+    // ... (Seu código original do email de rejeição - está correto)
     if (!usuario || !usuario.email) {
         console.error('Dados do usuário inválidos para enviar e-mail de rejeição.');
         return;
     }
-
     const emailHtml = `
     <!DOCTYPE html>
     <html lang="pt-BR">
@@ -161,16 +161,81 @@ const enviarEmailRejeicaoEvento = async (usuario, evento, motivo) => {
     </body>
     </html>
     `;
-
     await enviarEmail({
         to: usuario.email,
         subject: `❌ Evento Não Aprovado: ${evento.nome}`,
         html: emailHtml
     });
 };
+
+
+/**
+ * 🔥 ALTERADO: Envia e-mail de CONFIRMAÇÃO DE CRIAÇÃO (em análise).
+ * @param {object} usuario 
+ * @param {object} evento 
+ */
 const enviarEmailConfirmacaoEvento = async (usuario, evento) => {
     if (!usuario || !usuario.email) {
         console.error('Dados do usuário inválidos para enviar e-mail de confirmação.');
+        return;
+    }
+
+    // Conteúdo HTML MODIFICADO para "Em Análise"
+    const emailHtml = `
+    <!DOCTYPE html>
+    <html lang="pt-BR">
+    <head>
+        <meta charset="UTF-8">
+        <style>
+            body { font-family: Arial, sans-serif; margin: 0; padding: 20px; color: #333; background-color: #f4f4f4; }
+            .container { max-width: 600px; margin: auto; background-color: #ffffff; border: 1px solid #ddd; padding: 30px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+            /* Cor alterada para azul (pendente/informativo) */
+            .header { font-size: 24px; font-weight: bold; color: #0969fb; text-align: center; margin-bottom: 20px; }
+            .content p { line-height: 1.6; font-size: 16px; margin: 10px 0; }
+            .evento-details { background-color: #f9f9f9; border-left: 4px solid #0969fb; padding: 20px; margin: 20px 0; border-radius: 4px; }
+            .footer { font-size: 12px; color: #888; text-align: center; margin-top: 30px; }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">⏳ Evento Recebido para Análise</div>
+            <div class="content">
+                <p>Olá, <strong>${usuario.nome}</strong>!</p>
+                <p>Recebemos o seu evento e ele já está em processo de análise pela nossa equipe.</p>
+                
+                <div class="evento-details">
+                    <p><strong>Evento:</strong> ${evento.nome}</p>
+                </div>
+
+                <p>Você será notificado por e-mail assim que o processo de revisão for concluído (geralmente em até 48 horas).</p>
+                <p>Obrigado por escolher a VibeTicket!</p>
+            </div>
+            <div class="footer">
+                <p>Equipe VibeTicket Eventos</p>
+            </div>
+        </div>
+    </body>
+    </html>
+    `;
+
+    // Subject MODIFICADO
+    await enviarEmail({
+        to: usuario.email,
+        subject: `⏳ Evento em Análise: ${evento.nome}`,
+        html: emailHtml
+    });
+};
+
+
+/**
+ * 🔥 NOVO: Envia e-mail de APROVAÇÃO do evento.
+ * (Este é o conteúdo que estava antes em 'enviarEmailConfirmacaoEvento')
+ * @param {object} usuario 
+ * @param {object} evento 
+ */
+const enviarEmailAprovacaoEvento = async (usuario, evento) => {
+    if (!usuario || !usuario.email) {
+        console.error('Dados do usuário inválidos para enviar e-mail de aprovação.');
         return;
     }
 
@@ -213,10 +278,12 @@ const enviarEmailConfirmacaoEvento = async (usuario, evento) => {
     });
 };
 
-// Exporta todas as funções, incluindo a nova
+
+// 🔥 ATUALIZADO: Exporta todas as funções, incluindo a nova 'enviarEmailAprovacaoEvento'
 module.exports = { 
     enviarEmail, 
-    enviarEmailConfirmacaoEvento, 
+    enviarEmailConfirmacaoEvento, // Agora envia "Em Análise"
+    enviarEmailAprovacaoEvento,   // Nova função para "Aprovado"
     enviarEmailRejeicaoEvento,
-    enviarEmailIngresso // 🔥 NOVO
+    enviarEmailIngresso
 };

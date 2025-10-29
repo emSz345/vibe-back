@@ -6,27 +6,21 @@ const ingressoSchema = new mongoose.Schema({
         ref: 'User',
         required: true
     },
-    // ID do Pedido (agrupa a transação)
     pedidoId: {
         type: String,
         required: true,
         index: true
     },
-    // ID do Pagamento (vem do webhook, por isso não é obrigatório)
     paymentId: {
         type: String,
-        required: false, // <-- Confirme que está 'false'
-        unique: true,    // <-- ADICIONE ISSO
-        sparse: true     // <-- ADICIONE ISSO (O MAIS IMPORTANTE)
+        required: false,
+        sparse: true // Ótimo que você adicionou isso!
     },
-    // Link para o evento
     eventoId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Event',
         required: true
     },
-    // CAMPOS REDUNDANTES REMOVIDOS (nomeEvento, dataEvento, localEvento)
-    // Use .populate('eventoId') para buscar esses dados.
     tipoIngresso: {
         type: String,
         enum: ['Inteira', 'Meia'],
@@ -39,14 +33,23 @@ const ingressoSchema = new mongoose.Schema({
     status: {
         type: String,
         required: true,
-        enum: ['Pago', 'Pendente', 'Cancelado', 'Recusado'], // <-- 'Recusado' adicionado
+        // 🔥 MUDANÇA AQUI: Adicionado 'Expirado'
+        enum: ['Pago', 'Pendente', 'Cancelado', 'Recusado', 'Expirado', 'Reembolsado'],
         default: 'Pendente'
     },
+    // 🔥 CAMPO NOVO E CRUCIAL (que faltou):
+    expiresAt: {
+        type: Date,
+        // Define que este campo só é necessário se o status for 'Pendente'
+        required: function () { return this.status === 'Pendente'; }
+    }
 }, { timestamps: true });
 
-// Índice composto (bom para garantir que um ingresso não seja duplicado por engano)
-ingressoSchema.index({ pedidoId: 1, eventoId: 1, userId: 1 });
+// 🔥 ÍNDICE CRUCIAL para o Cron Job (que faltou):
+// Ele busca todos os ingressos 'Pendente' que já 'expiraram'
+ingressoSchema.index({ status: 1, expiresAt: 1 });
 
+// Linha para evitar recriação do model em ambientes de dev (correto)
 const Ingresso = mongoose.models.Ingresso || mongoose.model('Ingresso', ingressoSchema);
 
 module.exports = Ingresso;
