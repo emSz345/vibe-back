@@ -7,13 +7,13 @@ const fs = require('fs');
 const path = require('path');
 const jwt = require('jsonwebtoken');
 const cookieParser = require('cookie-parser');
-const cron = require('node-cron'); // Import do Cron
+const cron = require('node-cron');
 
 // =================================================================
-// 📂 Importação de Models (NECESSÁRIOS PARA O CRON JOB)
+// 📂 Importação de Models
 // =================================================================
-const Ingresso = require('./models/ingresso'); // Seu model
-const Event = require('./models/Event');       // Model de Evento
+const Ingresso = require('./models/ingresso');
+const Event = require('./models/Event');
 
 // =================================================================
 // 🔑 Middleware de Autenticação JWT
@@ -63,15 +63,13 @@ const carrosselDir = path.join(uploadBaseDir, 'carrossel');
 });
 
 // =================================================================
-// 🔗 Importação de Rotas
+// 🔗 Importação de Rotas (ATUALIZADO)
 // =================================================================
-// Importa payRoutes PRIMEIRO para usar na regra de webhook raw
 const payRoutes = require('./routes/payRoutes');
-
 const userRoutes = require('./routes/users');
 const eventRoutes = require('./routes/eventRoutes');
 const carrosselRoutes = require('./routes/carrosselRoutes');
-const huggingfaceRoutes = require('./routes/huggingfaceRoutes');
+const huggingfaceRoutes = require('./routes/chat');
 const compraRoutes = require('./routes/comprasRoutes');
 const perfilRoutes = require('./routes/perfilRoutes');
 const splitPayRoutes = require('./routes/splitPayRoutes');
@@ -80,33 +78,35 @@ const carrinhoRoutes = require('./routes/carrinhoRoutes');
 const ingressoRoutes = require('./routes/ingressoRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 
+// 🔥 NOVA ROTA DO CHATBOT REFATORADO
+const chatRoutes = require('./routes/chat');
+
 const PORT = process.env.PORT || 5000;
 const front = process.env.FRONTEND_URL;
 
 // =================================================================
-// ⚙️ Configuração de Middlewares (Ordem Correta e Otimizada)
+// ⚙️ Configuração de Middlewares
 // =================================================================
-
 app.use(cors({
     origin: front,
     credentials: true
 }));
 
-// 1. COOKIE PARSER: Essencial para ler req.cookies
+// 1. COOKIE PARSER
 app.use(cookieParser());
 
-// 2. WEBHOOK (RAW): Parser específico para a rota de webhook, ANTES do parser JSON global.
+// 2. WEBHOOK (RAW)
 app.use('/api/pagamento/webhook', express.raw({ type: 'application/json' }), payRoutes);
 
-// 3. JSON PARSER (CORRIGIDO): Para todas as outras rotas.
-app.use(express.json({ limit: '10kb' }));
+// 3. JSON PARSER com limite aumentado para o chatbot
+app.use(express.json({ limit: '10mb' })); // ← Aumentei para 10mb
 
 // --- Servir Arquivos Estáticos ---
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // =================================================================
-// 🗺️ Rotas da API
+// 🗺️ Rotas da API (ATUALIZADO)
 // =================================================================
 app.use('/api/users', userRoutes);
 app.use('/api/auth', userRoutes);
@@ -115,69 +115,93 @@ app.use('/api/carrossel', carrosselRoutes);
 app.use('/api/huggingface', huggingfaceRoutes);
 app.use('/api/compras', compraRoutes);
 app.use('/api/perfil', perfilRoutes);
-app.use('/api/pagamento', payRoutes); // Rotas principais (iniciar-pagamento, etc.)
+app.use('/api/pagamento', payRoutes);
 app.use('/split-pay', splitPayRoutes);
 app.use('/api/mercadopago', mercadopagoAuthRoutes);
 app.use('/api/carrinho', carrinhoRoutes);
 app.use('/api/ingressos', ingressoRoutes);
 app.use('/api/admin', adminRoutes);
 
+// 🔥 NOVA ROTA DO CHATBOT REFATORADO
+app.use('/api/chat', chatRoutes);
+
 // ⚠️ Rota temporária de verificação de estoque
 app.get('/api/eventos/verificar-estoque/:id', (req, res) => {
     res.status(200).json({ estoqueDisponivel: true });
 });
 
+// --- Rota de saúde para monitoramento ---
+app.get('/health', (req, res) => {
+    res.json({ 
+        status: 'OK', 
+        timestamp: new Date().toISOString(),
+        memory: process.memoryUsage(),
+        environment: process.env.NODE_ENV || 'development'
+    });
+});
+
 // --- Middleware de 404 ---
 app.use((req, res, next) => {
-    res.status(404).send("Desculpe, a página que você procura não foi encontrada.");
+    res.status(404).json({ 
+        success: false,
+        error: "Desculpe, a página que você procura não foi encontrada." 
+    });
+});
+
+// --- Middleware de tratamento de erros ---
+app.use((err, req, res, next) => {
+    console.error('Erro não tratado:', err);
+    res.status(500).json({
+        success: false,
+        error: 'Erro interno do servidor',
+        ...(process.env.NODE_ENV === 'development' && { details: err.message })
+    });
 });
 
 // =================================================================
-// 🚀 Inicialização do Servidor e Conexão com o Banco de Dados
+// 🚀 Inicialização do Servidor
 // =================================================================
 mongoose.connect(process.env.MONGO_URI)
     .then(() => {
         console.log("✅ MongoDB conectado");
 
-        // 🔥 INICIA O SERVIDOR APENAS DEPOIS DE CONECTAR
         app.listen(PORT, () => {
             console.log(`🚀 Servidor rodando na porta ${PORT}`);
+            console.log(`🌍 Ambiente: ${process.env.NODE_ENV || 'development'}`);
+            console.log(`🤖 Chatbot refatorado disponível em: /api/chat`);
         });
 
-        // ================== INÍCIO DO CRON JOB ==================
-        // Roda a cada 5 minutos ('*/5 * * * *')
-        console.log('Iniciando o agendador (Cron Job) para limpar ingressos expirados.');
+        // ================== CRON JOB (MANTIDO) ==================
+        console.log('⏰ Iniciando agendador para limpar ingressos expirados...');
 
         cron.schedule('*/5 * * * *', async () => {
-            console.log('[Cron Job] Rodando verificação de ingressos expirados...');
+            console.log('[Cron Job] Verificando ingressos expirados...');
 
             const session = await mongoose.startSession();
             try {
                 await session.startTransaction();
 
-                // 1. Encontra ingressos "Pendentes" que já passaram da data de expiração
                 const ingressosExpirados = await Ingresso.find({
                     status: 'Pendente',
-                    expiresAt: { $lt: new Date() } // $lt = 'less than' (menor que agora)
+                    expiresAt: { $lt: new Date() }
                 }).session(session);
 
                 if (ingressosExpirados.length === 0) {
                     console.log('[Cron Job] Nenhum ingresso expirado encontrado.');
-                    await session.abortTransaction(); // Aborta se não há nada a fazer
+                    await session.abortTransaction();
                     session.endSession();
                     return;
                 }
 
-                console.log(`[Cron Job] ${ingressosExpirados.length} ingressos expirados encontrados. Processando devolução...`);
+                console.log(`[Cron Job] ${ingressosExpirados.length} ingressos expirados encontrados. Processando...`);
 
-                // 2. Agrupa para devolução
                 const contagemParaDevolver = {};
                 const idsParaAtualizar = [];
 
                 for (const ingresso of ingressosExpirados) {
                     const idEvento = ingresso.eventoId.toString();
                     const tipo = ingresso.tipoIngresso;
-                    idsParaAtualizar.push(ingresso._id); // Guarda o ID para atualizar o status
+                    idsParaAtualizar.push(ingresso._id);
 
                     if (!contagemParaDevolver[idEvento]) {
                         contagemParaDevolver[idEvento] = { Inteira: 0, Meia: 0 };
@@ -186,47 +210,40 @@ mongoose.connect(process.env.MONGO_URI)
                     if (tipo === 'Meia') contagemParaDevolver[idEvento].Meia++;
                 }
 
-                // 3. Devolve (re-incrementa) o estoque
                 const restockPromises = [];
                 for (const eventoId in contagemParaDevolver) {
                     const contagens = contagemParaDevolver[eventoId];
-                    const totalADevolver = contagens.Inteira + contagens.Meia;
-
-                    // 🔥 ATENÇÃO: Verifique se os nomes abaixo estão corretos
-                    // de acordo com seu Model 'Event.js'
                     const incrementOperation = { $inc: {} };
+                    
                     if (contagens.Inteira > 0) incrementOperation.$inc.quantidadeInteira = contagens.Inteira;
-                    if (contagens.Meia > 0) incrementOperation.$inc.quantidadeMeia = contagens.Meia;                      // <-- MUDE AQUI
+                    if (contagens.Meia > 0) incrementOperation.$inc.quantidadeMeia = contagens.Meia;
 
                     restockPromises.push(
                         Event.updateOne(
                             { _id: eventoId },
                             incrementOperation,
-                            { session: session } // Dentro da transação
+                            { session: session }
                         )
                     );
                 }
 
-                await Promise.all(restockPromises); // Espera o estoque voltar
+                await Promise.all(restockPromises);
 
-                // 4. Atualiza o status dos ingressos para "Expirado"
                 await Ingresso.updateMany(
                     { _id: { $in: idsParaAtualizar } },
                     {
-                        $set: { status: 'Expirado' }, // Define o novo status
-                        $unset: { expiresAt: "" } // Remove o campo de expiração
+                        $set: { status: 'Expirado' },
+                        $unset: { expiresAt: "" }
                     },
-                    { session: session } // Dentro da transação
+                    { session: session }
                 );
 
-                // 5. Sucesso! Efetiva a transação
                 await session.commitTransaction();
-                console.log(`[Cron Job] SUCESSO: ${idsParaAtualizar.length} ingressos atualizados para "Expirado" e estoque devolvido.`);
+                console.log(`[Cron Job] SUCESSO: ${idsParaAtualizar.length} ingressos atualizados para "Expirado"`);
 
             } catch (error) {
-                // Se algo der errado, aborta tudo
                 await session.abortTransaction();
-                console.error('[Cron Job] ERRO ao processar ingressos expirados:', error);
+                console.error('[Cron Job] ERRO:', error);
             } finally {
                 session.endSession();
             }
@@ -236,5 +253,5 @@ mongoose.connect(process.env.MONGO_URI)
     })
     .catch((err) => {
         console.error("❌ Erro ao conectar MongoDB:", err);
-        process.exit(1); // Encerra o processo se não conseguir conectar ao DB
+        process.exit(1);
     });

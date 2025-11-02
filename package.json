@@ -4,7 +4,7 @@
   "description": "",
   "main": "server.js",
   "scripts": {
-    "starts": "node server.js"
+    "starts": "node --max-old-space-size=4096 server.js"
   },
   "keywords": [],
   "author": "",
