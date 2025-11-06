@@ -8,9 +8,6 @@ class CartManagerService {
 
   processarAcaoCarrinho(acao, parametros, carrinhoAtual = []) {
     let novoCarrinho = [...carrinhoAtual];
-    let _quickReplies = [];
-    let _textoResposta = "";
-    let _navegarPara = null;
 
     switch (acao) {
       case 'verCarrinho':

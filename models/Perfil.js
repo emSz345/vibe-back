@@ -12,28 +12,27 @@ const PerfilSchema = new mongoose.Schema({
     enum: ['cpf', 'cnpj'],
     required: true
   },
-  // Dados pessoais que se aplicam a CPF ou CNPJ
   dadosPessoais: {
-    // Campos separados para CPF e CNPJ
-    cpf: { type: String, required: false },
-    cnpj: { type: String, required: false },
-
-    dataNascimento: { type: Date, required: false },
-    telefone: { type: String, required: false },
-    nomeCompleto: { type: String, required: false }
+    cpf: { type: String },
+    cnpj: { type: String },
+    dataNascimento: { type: Date },
+    telefone: { type: String },
+    nomeCompleto: { type: String }
   },
-  // Dados específicos para uma organização (CNPJ)
   dadosOrganizacao: {
-    razaoSocial: { type: String, required: false },
-    nomeFantasia: { type: String, required: false },
-    inscricaoMunicipal: { type: String, required: false },
-    cpfSocio: { type: String, required: false }
+    razaoSocial: { type: String },
+    nomeFantasia: { type: String },
+    inscricaoMunicipal: { type: String },
+    cpfSocio: { type: String }
   },
 
-  mercadoPagoAccountId: {
-    type: String,
-    required: false // É opcional, pois nem todo usuário será um criador de eventos
-  }
+  // 🔹 Vínculo com o Mercado Pago
+  mercadoPagoAccountId: { type: String },
+  mercadoPagoAccessToken: { type: String },
+  mercadoPagoRefreshToken: { type: String },
+  mercadoPagoPublicKey: { type: String },
+  mercadoPagoEmail: { type: String },
+
 }, { timestamps: true });
 
 module.exports = mongoose.model('Perfil', PerfilSchema);

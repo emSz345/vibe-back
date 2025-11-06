@@ -1,8 +1,9 @@
 class ChatOrchestrator {
-    constructor(servicoEventos, servicoAnalise, gerenciadorCarrinho) {
+    constructor(servicoEventos, servicoAnalise, gerenciadorCarrinho, systemInfoService) {
         this.servicoEventos = servicoEventos;
         this.servicoAnalise = servicoAnalise;
         this.gerenciadorCarrinho = gerenciadorCarrinho;
+        this.systemInfoService = systemInfoService;
     }
 
     async processarMensagem(mensagem, contextoUsuario) {
@@ -34,6 +35,27 @@ class ChatOrchestrator {
             console.log(`🔍 [ORQUESTRADOR] Intenção que busca eventos: ${analiseIntencao.tipo}`);
 
             switch (analiseIntencao.tipo) {
+                case 'outra_plataforma':
+                    resultado.textoResposta = "Desculpe, só posso ajudar com eventos e ingressos da plataforma NaVibe! 🎪\n\nPosso te mostrar os eventos incríveis que temos disponíveis aqui? 😊";
+                    resultado.necessitaAI = false;
+                    resultado.showCommands = false;
+                    break;
+                case 'ajuda_sistema':
+                    const tipoAjuda = analiseIntencao.parametros.tipo || 'cadastro';
+                    const respostaSistema = this.systemInfoService.gerarResposta(tipoAjuda);
+
+                    if (respostaSistema) {
+                        resultado.textoResposta = respostaSistema;
+                        resultado.necessitaAI = false;
+                        resultado.showCommands = true;
+                    }
+                    break;
+                case 'fora_contexto':
+                    resultado.textoResposta = "Desculpe, só consigo ajudar com eventos, ingressos e a plataforma NaVibe! 🎪\n\nPosso te ajudar a encontrar eventos incríveis ou tirar dúvidas sobre a plataforma? 😊";
+                    resultado.necessitaAI = false;
+                    resultado.showCommands = true;
+                    resultado.quickReplies = this.gerarQuickRepliesPadrao();
+                    break;
                 case 'outros':
                     // Se detectou categoria mas não intenção clara, busca eventos
                     if (analiseIntencao.parametros.categoria) {

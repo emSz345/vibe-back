@@ -70,7 +70,6 @@ const userRoutes = require('./routes/users');
 const eventRoutes = require('./routes/eventRoutes');
 const carrosselRoutes = require('./routes/carrosselRoutes');
 const huggingfaceRoutes = require('./routes/chat');
-const compraRoutes = require('./routes/comprasRoutes');
 const perfilRoutes = require('./routes/perfilRoutes');
 const splitPayRoutes = require('./routes/splitPayRoutes');
 const mercadopagoAuthRoutes = require('./routes/mercadopagoAuthRoutes');
@@ -80,6 +79,8 @@ const adminRoutes = require('./routes/adminRoutes');
 
 // 🔥 NOVA ROTA DO CHATBOT REFATORADO
 const chatRoutes = require('./routes/chat');
+
+const { iniciarCron: iniciarCronPayout } = require('./services/payoutScheduler');
 
 const PORT = process.env.PORT || 5000;
 const front = process.env.FRONTEND_URL;
@@ -113,7 +114,6 @@ app.use('/api/auth', userRoutes);
 app.use('/api/eventos', eventRoutes);
 app.use('/api/carrossel', carrosselRoutes);
 app.use('/api/huggingface', huggingfaceRoutes);
-app.use('/api/compras', compraRoutes);
 app.use('/api/perfil', perfilRoutes);
 app.use('/api/pagamento', payRoutes);
 app.use('/split-pay', splitPayRoutes);
@@ -170,6 +170,11 @@ mongoose.connect(process.env.MONGO_URI)
             console.log(`🌍 Ambiente: ${process.env.NODE_ENV || 'development'}`);
             console.log(`🤖 Chatbot refatorado disponível em: /api/chat`);
         });
+
+        // ================== NOVO CRON JOB (PAYOUTS) ==================
+        console.log('⏰ Iniciando agendador para Payouts de produtores...');
+        iniciarCronPayout(); // <-- CHAMA A FUNÇÃO QUE IMPORTAMOS
+        // =============================================================
 
         // ================== CRON JOB (MANTIDO) ==================
         console.log('⏰ Iniciando agendador para limpar ingressos expirados...');
