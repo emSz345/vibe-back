@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "target": "es2020", // Node.js moderno suporta ES2020
+    "module": "commonjs", // O formato de módulo do Node.js
+    "outDir": "./dist", // Onde o JavaScript compilado irá ficar
+    "rootDir": "./", // Onde seus arquivos .ts estão
+    "strict": true, // Habilita todas as checagens estritas (RECOMENDADO)
+    "esModuleInterop": true, // Melhora a compatibilidade com módulos CommonJS
+    "skipLibCheck": true, // Pula a verificação de tipos em arquivos .d.ts
+    "forceConsistentCasingInFileNames": true,
+    
+    // A CHAVE PARA MIGRAÇÃO INCREMENTAL:
+    "allowJs": true, // Permite que arquivos .js sejam "vistos" pelo TS
+    "checkJs": false // Não "type-check" arquivos .js
+  },
+  "include": [
+    "./**/*.ts" // Quais arquivos o TS deve compilar
+, "routes/chat.js", "routes/eventRoutes.js"  ],
+  "exclude": [
+    "node_modules" // Sempre exclua node_modules
+  ]
+}
