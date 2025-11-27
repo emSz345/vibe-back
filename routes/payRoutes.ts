@@ -176,6 +176,7 @@ router.post(
           items: mpItems,
           external_reference: pedidoId,
           back_urls: backUrls, // <--- NOVO
+          auto_return: "approved"
           metadata: {
             user_id: userId.toString(),
             pedido_id: pedidoId,
@@ -265,6 +266,7 @@ router.post(
           ],
           external_reference: doacaoId,
           back_urls: backUrls, // <--- NOVO
+          auto_return: "approved"
           metadata: { user_id: userId, pedido_id: doacaoId, tipo: "DOACAO" },
           notification_url: `${notification}/api/pagamento/webhook`,
         },
